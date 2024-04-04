@@ -15,7 +15,7 @@ def plot_accuracy_over_time_and_epochs(w_times, scores_windows, class_balance):
 
 def plot_confidence_over_time_and_epochs(w_times, confidence_windows, threshold):
     plt.figure()
-    plt.plot(w_times, np.mean(confidence_windows, 0 ), label="Scores")
+    plt.plot(w_times, np.mean(confidence_windows, 0), label="Scores")
     plt.xlabel("Time (s)")
     plt.ylabel("Confidence")
     plt.ylim(0,1)

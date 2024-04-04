@@ -4,7 +4,9 @@ import os
 import sys
 
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.model_selection import ShuffleSplit
+from sklearn.model_selection import ShuffleSplit, cross_val_score
+from sklearn.pipeline import Pipeline
+
 from scipy.stats import entropy
 
 from mne.decoding import CSP
@@ -16,10 +18,9 @@ print("ROOT:", project_root)
 from data.make_dataset import make_data
 from data.plots import plot_accuracy_over_time_and_epochs, plot_confidence_over_time_and_epochs
 
-#from feauterimport plot_entropy_over_time
 
-#add for when only 1 epoch
 
+#expanding window - hyperparamers - intial window lenght, expansion rate
 def predict_expanding(initial_window_length, w_start, w_step, y_test, epochs_data, test_idx, probs_this_window, chosen_epoch = None):
     score_this_window = []
     #preds_this_window = []
@@ -63,7 +64,47 @@ def predict_expanding(initial_window_length, w_start, w_step, y_test, epochs_dat
     return score_this_window, probs_this_window, entropy_this_window, confidence_this_window
 
 
-#def predict_sliding():
+def predict_sliding(w_length, w_start, w_step, y_test, epochs_data, test_idx, probs_this_window, chosen_epoch = None):
+    score_this_window = []
+    #preds_this_window = []
+    entropy_this_window = []
+    confidence_this_window = []
+    for n in w_start:
+        X_test = csp.transform(epochs_data[test_idx][:, :, n : (n + w_length)]) #-it chooses all epochs and all channels, and a subset of the dataopoint. Then applied CSP transformation
+
+        if chosen_epoch != None:
+            X_test = X_test [chosen_epoch] #Chooosing a specific epoch in the test set 
+        #Accuracy
+        score = lda.score(X_test, y_test)
+        score_this_window.append(score)
+        
+        probabilities = lda.predict_proba(X_test)
+        
+        if len(probs_this_window) == 0:
+            probs_this_window = probabilities
+        else:
+            probs_this_window = np.vstack((probs_this_window, probabilities))
+
+       # print("Prediction for this time window: ", prediction)
+        #print("prob shape: ", probabilities.shape)
+        #print("probabilities: \n", probabilities)
+
+        #predictive entropy - H_pred(p) 
+        entropy_score = entropy(probabilities, axis = 1) #- see if entropy is better than probabilites
+        entropy_this_window.append(entropy_score)
+
+        '''
+        Confidence - as seen in: 
+        Uncertainty Quantification in Machine Learning for Biosignal Applications - A Review, page 13.
+        1 - H_pred(p) can be used as a confidence measure. Normalizing seems useful - 1 / (1- entropy-score)
+        '''
+        #confidence
+        confidence = 1 - entropy_score
+        confidence_this_window.append(confidence)
+
+    return score_this_window, probs_this_window, entropy_this_window, confidence_this_window
+
+
     
 threshold = 0.7
 subject_list = [1]
@@ -114,44 +155,70 @@ probabilitites_windows = []
 scores_windows = []  
 confidence_windows = []
 entropy_windows = []
-traversal_type = 'expanding'
-# Running classification across the signal
-for train_idx, test_idx in cv_split:
-    y_train, y_test = labels[train_idx], labels[test_idx] # Get the current labels and data
-    
-    # Exatract spatial filters and transform the data as a whole
-    X_train = csp.fit_transform(epochs_data_train[train_idx], y_train)
-    X_test = csp.transform(epochs_data_train[test_idx])
+traversal_types = ['expanding', 'sliding', 'whole_data']
+traversal_types_scores = []
+for type in traversal_types:
+    # Running classification across the signal
+    for train_idx, test_idx in cv_split:
+        y_train, y_test = labels[train_idx], labels[test_idx] # Get the current labels and data
+        
+        # Exatract spatial filters and transform the data as a whole
+        X_train = csp.fit_transform(epochs_data_train[train_idx], y_train)
+        X_test = csp.transform(epochs_data_train[test_idx])
 
-    # Fit the classifier on the training data
-    lda.fit(X_train, y_train)
-    w_times = (w_start + w_length / 2.0) / sfreq + epochs.tmin
+        # Fit the classifier on the training data
+        lda.fit(X_train, y_train)
+        w_times = (w_start + w_length / 2.0) / sfreq + epochs.tmin
 
-    # Test the classifier on the windows. This is where we run over the signal
-    probs_this_window = []
-    #chosen_epoch = 80
-    c = 0
-    if traversal_type == 'sliding':
-        #predict_sliding()
-        c= 1
-    elif traversal_type == 'expanding':
-        score_this_window, probs_this_window, entropy_this_window, confidence_this_window = predict_expanding(
-            w_length, 
-            w_start,
-            w_step,
-            y_test,
-            epochs_data,
-            test_idx,
-            probs_this_window,
-            chosen_epoch = None
-        )
-    scores_windows.append(score_this_window)
-    probabilitites_windows.append(probs_this_window)
-    confidence_windows.append(confidence_this_window)
-    entropy_windows.append(entropy_this_window)
+        # Test the classifier on the windows. This is where we run over the signal
+        probs_this_window = []
+        #chosen_epoch = 80
+        c = 0
+        if type == 'sliding':
+            score_this_window, probs_this_window, entropy_this_window, confidence_this_window = predict_sliding(
+                w_length, 
+                w_start,
+                w_step,
+                y_test,
+                epochs_data,
+                test_idx,
+                probs_this_window,
+                chosen_epoch = None
+            )
+            c= 1
+            print("Score_this_window slding, mean:\n", np.mean(score_this_window))
+        elif type == 'expanding':
+            score_this_window, probs_this_window, entropy_this_window, confidence_this_window = predict_expanding(
+                w_length, 
+                w_start,
+                w_step,
+                y_test,
+                epochs_data,
+                test_idx,
+                probs_this_window,
+                chosen_epoch = None
+            )
+            print("Score_this_window Exapanding, mean:\n", np.mean(score_this_window))
+        else:
+            #whole data
+            clf = Pipeline([("CSP", csp), ("LDA", lda)])
+            score_this_windows = cross_val_score(clf, epochs_data_train, labels, cv=cv, n_jobs=None)
+            print("Score_this_window whole, mean:\n",  np.mean(score_this_window))
 
-# Plot the scores over time
-print("accuracy_all shape: ", scores_windows.shape)
-print("confindence_all shape: ", confidence_windows.shape)
-plot_accuracy_over_time_and_epochs(w_times, scores_windows, class_balance)
-plot_confidence_over_time_and_epochs(w_times, confidence_windows, threshold)
+        scores_windows.append(score_this_window)
+        probabilitites_windows.append(probs_this_window)
+        confidence_windows.append(np.mean(confidence_this_window, 1))
+        entropy_windows.append(entropy_this_window)
+
+        traversal_types_scores.append(np.mean(scores_windows))
+        'get accurate scores, make sure this varaible is a 1d array with 3 values, it is currently not'
+    # Plot the scores over time
+    #plot_accuracy_over_time_and_epochs(w_times, scores_windows, class_balance)
+    #plot_confidence_over_time_and_epochs(w_times, confidence_windows, threshold)
+
+# Printing the results - FIX THIS!!!
+print(traversal_types_scores)
+for i in range(len(traversal_types)):
+    print(
+        "Classification accuracy of %s: %f / Chance level: %f" % (traversal_types[i], traversal_types_scores[i], class_balance)
+    )

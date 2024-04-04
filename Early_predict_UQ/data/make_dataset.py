@@ -17,12 +17,9 @@ from moabb.paradigms import MotorImagery
 # Given a subject list, return the preprocessed and epoched data
 def make_data(subject_list):
     dataset = BNCI2014_001()
-    paradigm = MotorImagery()
+    paradigm = MotorImagery(fmin=7, fmax=30) # Bandpass filter between to enhance mu and beta frequencies
     epochs, labels, _ = paradigm.get_data( 
         dataset=dataset, subjects=subject_list, return_epochs=True
     )
-
-    # Bandpass filter between to enhance mu and beta frequencies
-    epochs.filter(l_freq=7, h_freq=30)
 
     return epochs, labels
