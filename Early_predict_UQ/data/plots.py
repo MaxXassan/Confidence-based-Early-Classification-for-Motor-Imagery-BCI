@@ -2,10 +2,23 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 ##Plot over time and epochs
-def plot_accuracy_over_time_and_epochs(w_times, scores_windows, class_balance):
-    plt.figure()
-    plt.plot(w_times, np.mean(scores_windows, 0), label="Score")
+def plot_cost_over_time_and_epochs(w_times, costs, predict_time):
+    plt.plot(w_times, costs, label='Cost')
+    plt.xlabel("Time (s)")
+    plt.ylabel("Cost")
+    plt.axvline(w_times[predict_time], linestyle="-", color="k", label="Stopping")
     plt.axvline(2, linestyle="--", color="k", label="Onset")
+    plt.axhline(0.5, linestyle="-", color="k", label="Threshold")
+    plt.title("Cost over Time")
+    plt.legend()
+    plt.show()
+
+def plot_accuracy_over_time_and_epochs(w_times, scores_windows, predict_time, class_balance):
+    plt.figure()
+
+    plt.plot(w_times, np.mean(np.transpose(scores_windows), 1), label="Score")
+    plt.axvline(2, linestyle="--", color="k", label="Onset")
+    plt.axvline(w_times[predict_time], linestyle="-", color="k", label="Stopping")
     plt.axhline(class_balance, linestyle="-", color="k", label="Chance")
     plt.xlabel("time (s)")
     plt.ylabel("classification accuracy")
@@ -13,9 +26,28 @@ def plot_accuracy_over_time_and_epochs(w_times, scores_windows, class_balance):
     plt.legend(loc="lower right")
     plt.show()
 
-def plot_confidence_over_time_and_epochs(w_times, confidence_windows, threshold):
+def plot_confidence_over_time_and_epochs(w_times, confidence_windows, predict_time, threshold):
     plt.figure()
     plt.plot(w_times, np.mean(confidence_windows, 0), label="Scores")
+    plt.xlabel("Time (s)")
+    plt.ylabel("Confidence")
+    plt.ylim(0,1)
+    plt.axvline(2, linestyle="--", color="k", label="Onset")
+    plt.axvline(w_times[predict_time], linestyle="-", color="k", label="Stopping")
+    #plt.axhline(threshold, linestyle="-", color="k", label="Threshold")
+    plt.title("Model confidence over Time")
+    plt.legend()
+    plt.show()
+
+def plots_over_time_and_epochs(w_times, scores_windows, entropy_windows, confidence_windows, threshold):
+    plt.figure()
+    scores = np.mean(np.transpose(scores_windows), 1)
+    confidences = np.mean(confidence_windows, 0)
+    entropys = np.mean(entropy_windows, 0)
+    benefit = confidences + w_times
+    plt.plot(w_times, scores, label="Scores")
+    plt.plot(w_times, confidences, label="Confidence")
+    plt.plot(w_times, benefit, label="Benefit")
     plt.xlabel("Time (s)")
     plt.ylabel("Confidence")
     plt.ylim(0,1)
