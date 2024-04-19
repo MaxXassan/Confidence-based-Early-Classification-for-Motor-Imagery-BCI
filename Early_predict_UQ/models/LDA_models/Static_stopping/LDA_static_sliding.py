@@ -3,7 +3,7 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.model_selection import KFold
+from sklearn.model_selection import ShuffleSplit
 from mne.decoding import CSP
 
 from sklearn.model_selection import ParameterSampler
@@ -30,17 +30,16 @@ def run_sliding_classification(subjects, w_length, w_step, csp_components):
         print("Person %d" % (person))
         subject= [person]
         epochs, labels = make_data(subject)
-        epochs_train = epochs.copy()
         labels = epochs.events[:, -1] - 4
         epochs_data = epochs.get_data(copy=False)
 
-        kf = KFold(n_splits=10, shuffle=True, random_state=42)
+        cv = ShuffleSplit(n_splits=10, test_size = 0.2, random_state=42)
         scores_cv_splits = []
 
         lda = LinearDiscriminantAnalysis()
         csp = CSP(n_components= csp_components, reg=None, log=True, norm_trace=False)
         current_cv = 0 
-        for train_idx, test_idx in kf.split(epochs_data):
+        for train_idx, test_idx in cv.split(epochs_data):
             current_cv += 1
             y_train, y_test = labels[train_idx], labels[test_idx]
             X_train = csp.fit_transform(epochs_data[train_idx], y_train)
@@ -69,7 +68,7 @@ def run_sliding_classification(subjects, w_length, w_step, csp_components):
     return subjects_accuracies, accuracy
  
 def create_parameterslist(sfreq):
-    rng = np.random.RandomState(41)
+    rng = np.random.RandomState(42)
     
     w_length_values = np.round(rng.uniform(0.1, 1, 10), 2)
 

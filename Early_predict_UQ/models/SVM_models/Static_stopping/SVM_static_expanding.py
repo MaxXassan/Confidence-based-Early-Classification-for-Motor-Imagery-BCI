@@ -2,7 +2,7 @@ import os
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.svm import SVC
 from sklearn.model_selection import ShuffleSplit
 from mne.decoding import CSP
 
@@ -21,7 +21,7 @@ from Early_predict_UQ.data.make_dataset import make_data
 
 
 # epoch tmin  = 2 and tmax = 6 , as the motor imagery task lasted in that time
-def run_expanding_classification(subjects, initial_window_length, expansion_rate, csp_components):
+def run_expanding_classification(subjects, initial_window_length, expansion_rate, csp_components, c, kernel, gamma = None):
     scores_across_subjects = []
     subjects_accuracies =[]
 
@@ -35,21 +35,23 @@ def run_expanding_classification(subjects, initial_window_length, expansion_rate
 
         cv = ShuffleSplit(n_splits=10, test_size = 0.2, random_state=42)
         scores_cv_splits = []
-
-        lda = LinearDiscriminantAnalysis()
+        if gamma == None:
+            svm = SVC(C = c, kernel = kernel, probability = True)
+        else:
+            svm = SVC(C = c, gamma = gamma,kernel = kernel, probability = True)
         csp = CSP(n_components= csp_components, reg=None, log=True, norm_trace=False)
         current_cv = 0 
         for train_idx, test_idx in cv.split(epochs_data):
             current_cv += 1
             y_train, y_test = labels[train_idx], labels[test_idx]
             X_train = csp.fit_transform(epochs_data[train_idx], y_train)
-            lda.fit(X_train, y_train)
+            svm.fit(X_train, y_train)
             w_start = np.arange(0, epochs_data.shape[2] - initial_window_length, expansion_rate) 
             scores_across_epochs = []
             for n, window_start in enumerate(w_start):
                 window_length = initial_window_length + n * expansion_rate
                 X_test_window = csp.transform(epochs_data[test_idx][:, :,  window_start:(window_start + window_length)])
-                score = lda.score(X_test_window, y_test)
+                score = svm.score(X_test_window, y_test)
                 scores_across_epochs.append(score)
             if current_cv == 1:
                 scores_cv_splits = np.array(scores_across_epochs)
@@ -66,6 +68,8 @@ def run_expanding_classification(subjects, initial_window_length, expansion_rate
     accuracy = mean_scores_across_subjects
 
     return subjects_accuracies, accuracy
+from sklearn.model_selection import ParameterSampler
+import numpy as np
 
 def create_parameterslist(sfreq):
     rng = np.random.RandomState(42)
@@ -73,13 +77,18 @@ def create_parameterslist(sfreq):
     expansion_rate = np.round(rng.uniform(0.1, 1, 10), 1)
 
     parameters = {  
-    'csp_components': [2, 4, 6, 8, 10], 
-    'initial_window_length': np.round(sfreq * initial_window_length).astype(int), 
-    'expansion_rate':  np.round(sfreq * expansion_rate).astype(int)
+        'csp_components': [2, 4, 6, 8, 10], 
+        'initial_window_length': np.round(sfreq * initial_window_length).astype(int), 
+        'expansion_rate':  np.round(sfreq * expansion_rate).astype(int),
+        'C': [0.1, 1, 10, 100, 1000],  
+        'kernel': ['linear', 'rbf'] 
     }
 
-    #Random search parameters
     parameters_list = list(ParameterSampler(parameters, n_iter=20, random_state=rng))
+    for param_set in parameters_list:
+        if param_set['kernel'] == 'rbf':
+            param_set['gamma'] = rng.choice([1, 0.1, 0.01, 0.001, 0.0001])
+
     return parameters_list
 
 #Random search
@@ -90,8 +99,13 @@ def hyperparameter_tuning (parameters_list, subjects):
         csp_components = param_set['csp_components']
         initial_window_length = param_set['initial_window_length'] 
         expansion_rate =  param_set['expansion_rate']
-
-        _ , accuracy = run_expanding_classification(subjects, initial_window_length, expansion_rate, csp_components)
+        c = param_set['C']
+        kernel = param_set['kernel']
+        if kernel == 'rbf':
+            gamma = param_set['gamma']
+            _ , accuracy = run_expanding_classification(subjects, initial_window_length, expansion_rate, csp_components, c, kernel, gamma)
+        else:
+            _ , accuracy = run_expanding_classification(subjects, initial_window_length, expansion_rate, csp_components, c, kernel, gamma = None)
         
         mean_accuracy = np.mean(accuracy)
 
@@ -132,10 +146,10 @@ def evaluate_and_plot(best_params, best_accuracy, accuracy,subjects_accuracies):
     plt.plot(prediction_times, accuracy_array)
     plt.axhline(class_balance, linestyle="-", color="k", label="Chance")
     plt.axvline(tmin, linestyle="--", color="k", label="Onset")
-    plt.title('Accuracy over time: LDA - Static model - Expanding window')
+    plt.title('Accuracy over time: SVM - Static model - Expanding window')
     plt.legend()
     plt.grid(True)
-    plt.savefig(project_root + '/reports/figures/cumulitive/LDA/static/lda_static_expanding_accuracy_over_time.png')
+    plt.savefig(project_root + '/reports/figures/cumulitive/SVM/static/svm_static_expanding_accuracy_over_time.png')
     plt.show()
 
 def epochs_info(labels=False, tmin=False, length=False):
@@ -167,12 +181,20 @@ if __name__ == "__main__":
     #Hyperparameter_tuning
     print("\n\n Hyperparameter tuning: \n\n")
     parameters_list = create_parameterslist(sfreq)
+    for parameter in parameters_list:
+        print("\n")
+        print(parameter)
+
     best_params, best_accuracy = hyperparameter_tuning(parameters_list, subjects)
     
     #classify
     print("\n\n Classification: \n\n")
-    subjects_accuracies, accuracy = run_expanding_classification(subjects, best_params['initial_window_length'], best_params['expansion_rate'], best_params['csp_components'])
+    if best_params['kernel'] == 'rbf':
+        subjects_accuracies, accuracy = run_expanding_classification(subjects, best_params['w_length'], best_params['w_step'], best_params['csp_components'], best_params['C'], best_params['kernel'], best_params['gamma'])
+    else:
+        subjects_accuracies, accuracy = run_expanding_classification(subjects, best_params['w_length'], best_params['w_step'], best_params['csp_components'], best_params['C'], best_params['kernel'], gamma = None)
     accuracy_array = np.array(accuracy)
+
 
     #evaluate and plot
     evaluate_and_plot(best_params, best_accuracy, accuracy,subjects_accuracies)

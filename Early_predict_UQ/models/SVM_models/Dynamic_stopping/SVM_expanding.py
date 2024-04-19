@@ -1,3 +1,4 @@
+from lib2to3.pgen2 import grammar
 from operator import index
 import os
 import sys
@@ -5,7 +6,7 @@ from textwrap import indent
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import entropy
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.svm import SVC
 from sklearn.model_selection import ShuffleSplit
 from mne.decoding import CSP
 
@@ -61,7 +62,7 @@ def early_pred(probabilities, predict, numTimesThresholdCrossed, patience, confi
     return predict, numTimesThresholdCrossed, previous_class_index
 
 #Given sliding window and stopping values, we average the accuracy and prediction time for the model
-def run_sliding_classification(subjects, threshold, patience, confidence_type, w_length, w_step, sfreq):
+def run_expanding_classification(subjects, threshold, patience, confidence_type, initial_window_length, expansion_rate, sfreq, c , kernel, gamma = None):
     scores_across_subjects = []
     prediction_time_across_subjects = []
     current_person = 0
@@ -74,21 +75,27 @@ def run_sliding_classification(subjects, threshold, patience, confidence_type, w
         epochs_data = epochs.get_data(copy=False)
 
         cv = ShuffleSplit(n_splits=10, test_size = 0.2, random_state=42)
+
         scores_cv_splits = []
         predict_time_cv_splits = []
 
-        lda = LinearDiscriminantAnalysis()
+        if kernel == 'linear':
+            svm = SVC(C = c, kernel =kernel, probability = True)
+        else:
+            svm = SVC(C = c, kernel =kernel, gamma = gamma, probability = True)
         csp = CSP(n_components=4, reg=None, log=True, norm_trace=False)
         current_cv = 0 
         
+        scores_cv_splits = []
+        predict_time_cv_splits = []
 
         for train_idx, test_idx in cv.split(epochs_data):
 
             current_cv += 1
             y_train, y_test = labels[train_idx], labels[test_idx]
             X_train = csp.fit_transform(epochs_data[train_idx], y_train)
-            lda.fit(X_train, y_train)
-            w_start = np.arange(0, epochs_data.shape[2] - w_length, w_step) 
+            svm.fit(X_train, y_train)
+            w_start = np.arange(0, epochs_data.shape[2] - initial_window_length, expansion_rate) 
 
             scores_across_epochs = []
             predict_time_across_epochs = []
@@ -97,10 +104,11 @@ def run_sliding_classification(subjects, threshold, patience, confidence_type, w
                 previous_class_index = None
                 predict = False
                 numTimesThresholdCrossed = 0
-                for n in w_start:
-                    X_test_window = csp.transform(epochs_data[test_idx][:, :, n:(n + w_length)])
+                for n, window_start in enumerate(w_start):
+                    window_length = initial_window_length + n * expansion_rate
+                    X_test_window = csp.transform(epochs_data[test_idx][:, :,  window_start:(window_start + window_length)])
                     X_test_epoch_window = X_test_window[epoch_idx]
-                    probabilities = lda.predict_proba([X_test_epoch_window])
+                    probabilities = svm.predict_proba([X_test_epoch_window])
                     probabilities = np.array(probabilities)
                     probabilities = probabilities.flatten()
                     predict, numTimesThresholdCrossed,  previous_class_index = early_pred(
@@ -108,17 +116,18 @@ def run_sliding_classification(subjects, threshold, patience, confidence_type, w
                     )
                     if predict:
                         predict_time = n
-                        score = lda.score(X_test_epoch_window.reshape(1, -1), [y_test[epoch_idx]])
+                        score = svm.score(X_test_epoch_window.reshape(1, -1), [y_test[epoch_idx]])
                         break
                 else:
                     predict_time = n
-                    score = lda.score(X_test_epoch_window.reshape(1, -1), [y_test[epoch_idx]])
-                predict_time = (predict_time + w_length / 2.0) / sfreq + epochs.tmin
+                    score = svm.score(X_test_epoch_window.reshape(1, -1), [y_test[epoch_idx]])
+                predict_time = (predict_time + window_length / 2.0) / sfreq + epochs.tmin
                 scores_across_epochs.append(score)
                 predict_time_across_epochs.append(predict_time)
                 
             scores_cv_splits.append(scores_across_epochs)
             predict_time_cv_splits.append(predict_time_across_epochs)
+
         
         scores_cv_splits = np.array(scores_cv_splits)
         predict_time_cv_splits = np.array(predict_time_cv_splits)
@@ -131,6 +140,7 @@ def run_sliding_classification(subjects, threshold, patience, confidence_type, w
         else:
             scores_across_subjects = np.vstack((scores_across_subjects, mean_scores_across_cv))
             prediction_time_across_subjects = np.vstack((prediction_time_across_subjects, mean_predict_time_across_cv))
+
         mean_scores_across_subjects = np.mean(scores_across_subjects, axis=0)
         accuracy = np.mean(mean_scores_across_subjects)
 
@@ -140,7 +150,7 @@ def run_sliding_classification(subjects, threshold, patience, confidence_type, w
 
 
 
-def evaluate_and_plot(accuracy_array, prediction_time_array, threshold_values, patience_values, w_length, sfreq,confidence_type):
+def evaluate_and_plot(accuracy_array, prediction_time_array, threshold_values, patience_values, initial_window_length, sfreq,confidence_type):
     threshold_labels = [f'{threshold:.1f}' for threshold in threshold_values]
     labels = epochs_info(labels = True)
     # A formality as classes are balanced
@@ -153,7 +163,7 @@ def evaluate_and_plot(accuracy_array, prediction_time_array, threshold_values, p
     onset = tmin
     offset = tmax
 
-    patience_values = (patience_values * w_length) / sfreq
+    patience_values = (patience_values * initial_window_length) / sfreq # ? patience values cant be made into seconds for the expanding window
     # Plotting accuracy
     for i in range(len(accuracy_array)):
         plt.plot(patience_values, accuracy_array[i], label=f'Threshold {threshold_labels[i]}', linestyle='-', marker='o')
@@ -161,15 +171,15 @@ def evaluate_and_plot(accuracy_array, prediction_time_array, threshold_values, p
     plt.xlabel('Patience (sec)')
     plt.ylabel('Accuracy')
     plt.axhline(class_balance, linestyle="-", color="k", label="Chance")
-    plt.title('Accuracy vs Patience for Different Thresholds: LDA - Dynamic - Sliding model')
+    plt.title('Accuracy vs Patience for Different Thresholds: SVM - Dynamic - Expanding model')
     plt.legend()
     plt.grid(True)
     if confidence_type == 'highest_prob':
-        plt.savefig(project_root + '/reports/figures/cumulitive/LDA/dynamic/sliding/highest_prob/accuracy_thresholds.png')
+        plt.savefig(project_root + '/reports/figures/cumulitive/SVM/dynamic/expanding/highest_prob/accuracy_thresholds.png')
     elif confidence_type == 'difference_two_highest':
-        plt.savefig(project_root + '/reports/figures/cumulitive/LDA/dynamic/sliding/difference_two_highest/accuracy_thresholds.png')
+        plt.savefig(project_root + '/reports/figures/cumulitive/SVM/dynamic/expanding/difference_two_highest/accuracy_thresholds.png')
     else:
-        plt.savefig(project_root + '/reports/figures/cumulitive/LDA/dynamic/sliding/neg_norm_shannon/accuracy_thresholds.png')
+        plt.savefig(project_root + '/reports/figures/cumulitive/SVM/dynamic/expanding/neg_norm_shannon/accuracy_thresholds.png')
     plt.show()
 
     # Plotting prediction time
@@ -181,15 +191,15 @@ def evaluate_and_plot(accuracy_array, prediction_time_array, threshold_values, p
     plt.ylabel('Prediction Time')
     plt.axhline(onset, linestyle="--", color="r", label="Onset")
     plt.axhline(offset, linestyle="--", color="b", label="Offset")
-    plt.title('Prediction Time vs Patience for Different Thresholds: LDA - Dynamic - Sliding model')
+    plt.title('Prediction Time vs Patience for Different Thresholds: SVM - Dynamic - Expanding model')
     plt.legend()
     plt.grid(True)
     if confidence_type == 'highest_prob':
-        plt.savefig(project_root + '/reports/figures/cumulitive/LDA/dynamic/sliding/highest_prob/pred_time_thresholds.png')
+        plt.savefig(project_root + '/reports/figures/cumulitive/SVM/dynamic/expanding/highest_prob/pred_time_thresholds.png')
     elif confidence_type == 'difference_two_highest':
-        plt.savefig(project_root + '/reports/figures/cumulitive/LDA/dynamic/sliding/difference_two_highest/pred_time_thresholds.png')
+        plt.savefig(project_root + '/reports/figures/cumulitive/SVM/dynamic/expanding/difference_two_highest/pred_time_thresholds.png')
     else:
-        plt.savefig(project_root + '/reports/figures/cumulitive/LDA/dynamic/sliding/neg_norm_shannon/pred_time_thresholds.png')
+        plt.savefig(project_root + '/reports/figures/cumulitive/SVM/dynamic/expanding/neg_norm_shannon/pred_time_thresholds.png')
     plt.show()
     
 def epochs_info(labels=False, tmin=False, tmax = False, length=False):
@@ -227,9 +237,12 @@ if __name__ == "__main__":
     confidence_types = {'highest_prob', 'difference_two_highest', 'neg_norm_shannon'} 
     sfreq = 250      
     #Use tuned hyperparams from static?
-    w_length = int(sfreq * 0.5)  
-    w_step = int(sfreq * 0.1)   
-    w_start= np.arange(0, epochs_info(length= True) - w_length, w_step) 
+    c = 10
+    kernel = 'linear'
+    gamma = None
+    initial_window_length = int(sfreq * 0.5)  
+    expansion_rate = int(sfreq * 0.1)   
+    w_start= np.arange(0, epochs_info(length= True) - initial_window_length, expansion_rate) 
 
     patience_values = np.arange(1, len(w_start), 4) 
     print("patience_values: ", patience_values)
@@ -237,7 +250,6 @@ if __name__ == "__main__":
     threshold_values = np.arange(0.1, 1, 0.2)
     print("threshold_values: ", threshold_values)
     print("len threshold: ", len(threshold_values))
-
 
     accuracy_array = []
     prediction_time_array = []
@@ -252,7 +264,10 @@ if __name__ == "__main__":
                 print("\n")
                 print(f"Threshold:{n+1}/{len(threshold_values)},  Patience: {m+1}/{len(patience_values)}")
                 print("\n")
-                accuracy, prediction_time = run_sliding_classification(subjects, threshold, patience, confidence_type, w_length, w_step, sfreq)
+                if gamma  == None:
+                    accuracy, prediction_time = run_expanding_classification(subjects, threshold, patience, confidence_type, initial_window_length, expansion_rate, sfreq, c, kernel)
+                else: 
+                    accuracy, prediction_time = run_expanding_classification(subjects, threshold, patience, confidence_type, initial_window_length, expansion_rate, sfreq, c, kernel, gamma)
                 accuracy_row.append(accuracy)
                 prediction_time_row.append(prediction_time)
             accuracy_array.append(accuracy_row)
@@ -260,4 +275,4 @@ if __name__ == "__main__":
 
         accuracy_array = np.array(accuracy_array)
         prediction_time_array = np.array(prediction_time_array)
-        evaluate_and_plot(accuracy_array, prediction_time_array, threshold_values, patience_values, w_length, sfreq, confidence_type)
+        evaluate_and_plot(accuracy_array, prediction_time_array, threshold_values, patience_values, initial_window_length, sfreq, confidence_type)
