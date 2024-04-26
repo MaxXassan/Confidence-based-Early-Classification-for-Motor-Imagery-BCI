@@ -1,6 +1,7 @@
 from moabb.datasets import BNCI2014_001
 from moabb.paradigms import MotorImagery
 
+
 '''
 2 sessions, 
     - 6 runs in each session, 
@@ -18,8 +19,15 @@ from moabb.paradigms import MotorImagery
 def make_data(subject_list):
     dataset = BNCI2014_001()
     paradigm = MotorImagery(fmin=7, fmax=30) # Bandpass filter between to enhance mu and beta frequencies
-    epochs, labels, _ = paradigm.get_data( 
-        dataset=dataset, subjects=subject_list, return_epochs=True
-    )
 
+    epochs, labels, meta = paradigm.get_data( 
+            dataset=dataset, subjects=subject_list, return_epochs=True
+        )
+    
+    ##train session of the epochs
+    epochs_train = [epochs[i] for i in range(len(epochs)) if (epochs[i].metadata['session'].iloc[0] == '0train')]
+    ##train session of the epochs
+    epochs_test = [epochs[i] for i in range(len(epochs)) if (epochs[i].metadata['session'].iloc[0] == '1test')]
+
+    #will expand further
     return epochs, labels
