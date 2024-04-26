@@ -246,10 +246,12 @@ if __name__ == "__main__":
     print("threshold_values: ", threshold_values)
     print("len threshold: ", len(threshold_values))
 
-    accuracy_array = []
-    prediction_time_array = []
 
+    # evaluate everything for each of the 3 methods
     for confidence_type in VALID_CONFIDENCE_TYPES:
+        # array to hold the average accuracy and prediction times with size len(confidence_type) x len(thre)
+        accuracy_array = []
+        prediction_time_array = []
     # over threshold values
         for n, threshold in enumerate(threshold_values):
             accuracy_row = []
@@ -259,12 +261,14 @@ if __name__ == "__main__":
                 print("\n")
                 print(f"Threshold:{n+1}/{len(threshold_values)},  Patience: {m+1}/{len(patience_values)}")
                 print("\n")
+                #given the varaibles, provide the average accuracy and prediction times (early prediction)
                 accuracy, prediction_time = run_expanding_classification(subjects, threshold, patience, confidence_type, initial_window_length, expansion_rate, sfreq)
                 accuracy_row.append(accuracy)
                 prediction_time_row.append(prediction_time)
             accuracy_array.append(accuracy_row)
             prediction_time_array.append(prediction_time_row)
 
+        #Plotting the average accuracy and prediction times (early prediction) as well as the different threshold and patience values across subjects for each of the confidence types
         accuracy_array = np.array(accuracy_array)
         prediction_time_array = np.array(prediction_time_array)
         evaluate_and_plot(accuracy_array, prediction_time_array, threshold_values, patience_values, initial_window_length, sfreq, confidence_type)
