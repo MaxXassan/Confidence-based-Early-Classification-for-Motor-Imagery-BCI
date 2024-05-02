@@ -24,10 +24,4 @@ def make_data(subject_list):
             dataset=dataset, subjects=subject_list, return_epochs=True
         )
     
-    ##train session of the epochs
-    epochs_train = [epochs[i] for i in range(len(epochs)) if (epochs[i].metadata['session'].iloc[0] == '0train')]
-    ##train session of the epochs
-    epochs_test = [epochs[i] for i in range(len(epochs)) if (epochs[i].metadata['session'].iloc[0] == '1test')]
-
-    #will expand further
     return epochs, labels
