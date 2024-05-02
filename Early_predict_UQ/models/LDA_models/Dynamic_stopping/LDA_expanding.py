@@ -313,7 +313,7 @@ def epochs_info(labels=False, tmin=False, tmax = False, length=False):
     else:
         raise ValueError("At least one of 'labels', 'tmin', 'tmax' or 'length' must be True.")
     
-def lda_dynamic_main():
+def main_lda_static_expanding():
     subjects = [1, 2, 3, 4, 5, 6, 7, 8, 9] 
     confidence_types = {'highest_prob'} #'difference_two_highest', 'neg_norm_shannon'} 
     sfreq = 250      
@@ -379,3 +379,5 @@ def lda_dynamic_main():
         kappa_array = np.array(kappa_array)
         currentcm = np.divide(currentcm, number_cm)
         evaluate_and_plot(accuracy_array, prediction_time_array, kappa_array, threshold_values, patience_values, initial_window_length, sfreq, confidence_type, currentcm)        
+if __name__ == "__main__": 
+    main_lda_static_expanding()
