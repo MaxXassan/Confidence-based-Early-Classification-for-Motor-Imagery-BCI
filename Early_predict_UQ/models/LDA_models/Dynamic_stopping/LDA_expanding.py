@@ -197,7 +197,7 @@ def run_expanding_classification(subjects, threshold, patience, confidence_type,
 
 
 
-def evaluate_and_plot(accuracy_array, prediction_time_array, kappa_array, threshold_values, patience_values, initial_window_length, sfreq,confidence_type, currentcm):
+def evaluate_and_plot(accuracy_array, prediction_time_array, kappa_array, threshold_values, patience_values, initial_window_length, sfreq,confidence_type, cm):
     threshold_labels = [f'{threshold:.1f}' for threshold in threshold_values]
     labels = epochs_info(labels = True)
 
@@ -312,11 +312,10 @@ def epochs_info(labels=False, tmin=False, tmax = False, length=False):
         return epochs_data.shape[2]
     else:
         raise ValueError("At least one of 'labels', 'tmin', 'tmax' or 'length' must be True.")
-
-if __name__ == "__main__":
-
-    subjects = [1, 3] 
-    confidence_types = {'highest_prob'}#'difference_two_highest', 'neg_norm_shannon'} 
+    
+def lda_dynamic_main():
+    subjects = [1, 2, 3, 4, 5, 6, 7, 8, 9] 
+    confidence_types = {'highest_prob'} #'difference_two_highest', 'neg_norm_shannon'} 
     sfreq = 250      
 
     #Use tuned hyperparams from best params! later work
@@ -366,7 +365,7 @@ if __name__ == "__main__":
                 print("\n")
                 #given the varaibles, provide the average accuracy and prediction times (early prediction)
                 subjects_accuracies, scores_across_subjects, subjects_kappa, kappa_across_subjects, subjects_prediction_times, prediction_time_across_subjects, accuracy, kappa, prediction_time, cm = run_expanding_classification(subjects, threshold, patience, confidence_type, initial_window_length, expansion_rate, sfreq, csp_components)
-                curerntcm = currentcm + cm 
+                currentcm = currentcm + cm 
                 number_cm +=1
                 accuracy_row.append(accuracy)
                 prediction_time_row.append(prediction_time)
@@ -379,5 +378,4 @@ if __name__ == "__main__":
         prediction_time_array = np.array(prediction_time_array)
         kappa_array = np.array(kappa_array)
         currentcm = np.divide(currentcm, number_cm)
-        evaluate_and_plot(accuracy_array, prediction_time_array, kappa_array, threshold_values, patience_values, initial_window_length, sfreq, confidence_type, currentcm)
-        
+        evaluate_and_plot(accuracy_array, prediction_time_array, kappa_array, threshold_values, patience_values, initial_window_length, sfreq, confidence_type, currentcm)        
