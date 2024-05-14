@@ -1,26 +1,27 @@
-from math import log2
 import os
 import sys
 import numpy as np
+from math import log2
 import matplotlib.pyplot as plt
-from scipy.stats import entropy
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.model_selection import KFold # see if u an intergrate this
+from scipy.stats import entropy
+from sklearn.model_selection import KFold
 from sklearn.metrics import cohen_kappa_score, confusion_matrix, ConfusionMatrixDisplay
 from mne.decoding import CSP
+
+from sklearn.model_selection import ParameterSampler
+import numpy as np
 
 current_directory = os.path.abspath('')
 
 project_root = current_directory
 
 sys.path.append(project_root)
-
 print("ROOT:", project_root)
-from Early_predict_UQ.data.make_dataset import make_data
-
 
 VALID_CONFIDENCE_TYPES = {'highest_prob', 'difference_two_highest', 'neg_norm_shannon'}
-
+#Static hyperparameter tuning
+from Early_predict_UQ.data.make_dataset import make_data
 #Set confidence value given probabilities and method
 def find_confidence(confidence_type, probabilities):
     probabilities = probabilities.flatten()
@@ -75,7 +76,7 @@ def early_pred(probabilities, predict, numTimesThresholdCrossed, patience, confi
     return predict, numTimesThresholdCrossed, previous_class_index
 
 #Given sliding window and stopping values, we average the accuracy and prediction time for the model
-def run_expanding_classification(subjects, threshold, patience, confidence_type, initial_window_length, expansion_rate, sfreq, csp_components):
+def run_expanding_classification_dynamic(subjects, threshold, patience, confidence_type, initial_window_length, expansion_rate, sfreq, csp_components):
     scores_across_subjects = []
     kappa_across_subjects = []
     prediction_time_across_subjects = []
@@ -195,149 +196,144 @@ def run_expanding_classification(subjects, threshold, patience, confidence_type,
     cm = np.divide(cm, number_cm)
     return accuracy, kappa, prediction_time, cm, subjects_accuracies, subjects_prediction_times, subjects_kappa
 
+#Expanding window - classification - tuning using kfold cross validation
+   ##calculate kappa and accuracy at each window step
+def run_expanding_classification_tuning_static(subjects, initial_window_length, expansion_rate, csp_components):
+    scores_across_subjects = []
+    kappa_across_subjects = []
 
-def evaluate_and_plot(accuracy_array, prediction_time_array, kappa_array, threshold_values, patience_values, initial_window_length, sfreq,confidence_type):
-    threshold_labels = [f'{threshold:.1f}' for threshold in threshold_values]
-    labels = epochs_info(labels = True)
+    subjects_accuracies =[]
+    subjects_kappa = []
+    current_person = 0
+    for person in subjects:
+        current_person += 1
+        print("Person %d" % (person))
+        subject= [person]
+        epochs, labels = make_data(subject)
 
-    # A formality as classes are balanced
-    classes = ['left_hand', 'right_hand', 'tongue', 'feet']
-    class_balance = np.zeros(4)
-    for i, class_type in enumerate(classes):
-        class_balance[i] = np.mean(labels == class_type)
-    class_balance = np.max(class_balance)
-    print("class balance",  class_balance)
+        #get the training set - first session of the data for each subject
+        train_indexes = [i for i, epoch in enumerate(epochs) if epochs[i].metadata['session'].iloc[0] == '0train']
+        epochs_data = epochs.get_data(copy = False)
+        train_data = epochs_data[train_indexes]
+        train_labels = labels[train_indexes]
 
-    tmin, tmax = epochs_info(tmin = True, tmax = True)
-    onset = tmin
-    offset = tmax
-    #patience_values = (patience_values * initial_window_length) / sfreq # ? patience values cant be made into seconds for the expanding window
-    # Plotting accuracy
-    plt.figure()
-    for i in range(len(accuracy_array)):
-        plt.plot(patience_values, accuracy_array[i], label=f'Threshold {threshold_labels[i]}', linestyle='-', marker='o')
 
-    plt.xlabel('Patience')
-    plt.ylabel('Accuracy')
-    plt.axhline(class_balance, linestyle="-", color="k", label="Chance")
-    if confidence_type == 'highest_prob':
-       plt.title(f"Accuracy vs Patience (Highest Probability): LDA - Dynamic - Expanding model", fontsize=8)
-    elif confidence_type == 'difference_two_highest':
-        plt.title(f"Accuracy vs Patience (Divergence of two highest probability): LDA - Dynamic - Expanding model", fontsize=8)
-    else:
-        plt.title(f"Accuracy vs Patience (Shannon entropy): LDA - Dynamic - Expanding model", fontsize=8)
-    plt.legend()
-    plt.grid(True)
-    if confidence_type == 'highest_prob':
-        plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamic/expanding/highest_prob/accuracy_thresholds.png')
-    elif confidence_type == 'difference_two_highest':
-        plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamic/expanding/difference_two_highest/accuracy_thresholds.png')
-    else:
-        plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamic/expanding/neg_norm_shannon/accuracy_thresholds.png')
-    plt.show()
+        cv = KFold(n_splits=10, shuffle = True, random_state=42)
 
-    tmin, tmax = epochs_info(tmin = True, tmax = True)
-    onset = tmin
-    offset = tmax
-    prediction_time_array = prediction_time_array 
-   # Prediciton time
-    plt.figure()
-    for i in range(len(prediction_time_array)):
-        plt.plot(patience_values, prediction_time_array[i], label=f'Threshold {threshold_labels[i]}', linestyle='-', marker='o')
+        scores_cv_splits = []
+        kappa_cv_splits  = []
 
-    plt.xlabel('Patience')
-    plt.ylabel('Prediction Time')
-    plt.axhline(onset, linestyle="--", color="r", label="Onset")
-    plt.axhline(offset, linestyle="--", color="b", label="Offset")
-    if confidence_type == 'highest_prob':
-       plt.title(f"Prediction Time vs Patience (Highest Probability): LDA - Dynamic - Expanding model", fontsize=8)
-    elif confidence_type == 'difference_two_highest':
-        plt.title(f"Prediction Time vs Patience (Divergence of two highest probability): LDA - Dynamic - Expanding model", fontsize=8)
-    else:
-        plt.title(f"Prediction Timevs Patience (Shannon entropy): LDA - Dynamic - Expanding model", fontsize=8)
-    plt.legend()
-    plt.grid(True)
-    if confidence_type == 'highest_prob':
-        plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamic/expanding/highest_prob/prediction_time_thresholds.png')
-    elif confidence_type == 'difference_two_highest':
-        plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamic/expanding/difference_two_highest/prediction_time_thresholds.png')
-    else:
-        plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamic/expanding/neg_norm_shannon/prediction_time_thresholds.png')
-    plt.show()
+        lda = LinearDiscriminantAnalysis()
+        csp = CSP(n_components= csp_components, reg=None, log=True, norm_trace=False)
+        current_cv = 0 
+        for train_idx, test_idx in cv.split(train_data):
+            current_cv += 1
+            y_train, y_test = train_labels[train_idx], train_labels[test_idx]
+            X_train = csp.fit_transform(train_data[train_idx], y_train)
+            lda.fit(X_train, y_train)
+            w_start = np.arange(0, train_data.shape[2] - initial_window_length, expansion_rate) 
+            scores_across_epochs = []
+            kappa_across_epochs = []
+            for n, window_start in enumerate(w_start):
+                window_length = initial_window_length + n * expansion_rate
+                X_test_window = csp.transform(train_data[test_idx][:, :,  w_start[0]:window_length])
+                #accuracy
+                score = lda.score(X_test_window, y_test)
+                scores_across_epochs.append(score)
 
-    # Kappa
-    plt.figure()
-    for i in range(len(kappa_array)):
-        plt.plot(patience_values, kappa_array[i], label=f'Threshold {threshold_labels[i]}', linestyle='-', marker='o')
+                #kappa
+                kappa = cohen_kappa_score(lda.predict(X_test_window), y_test) 
+                kappa_across_epochs.append(kappa)
+            if current_cv == 1:
+                scores_cv_splits = np.array(scores_across_epochs)
+                kappa_cv_splits = np.array(kappa_across_epochs)
+            else:
+                scores_cv_splits = np.vstack((scores_cv_splits,np.array(scores_across_epochs)))
+                kappa_cv_splits = np.vstack((kappa_cv_splits,np.array(kappa_across_epochs)))
 
-    plt.xlabel('Patience')
-    plt.ylabel('Kappa')
-    if confidence_type == 'highest_prob':
-       plt.title(f"Kappa vs Patience (Highest Probability): LDA - Dynamic - Expanding model", fontsize=8)
-    elif confidence_type == 'difference_two_highest':
-        plt.title(f"Kappa vs Patience (Divergence of two highest probability): LDA - Dynamic - Expanding model", fontsize=8)
-    else:
-        plt.title(f"Kappa vs Patience (Shannon entropy): LDA - Dynamic - Expanding model", fontsize=8)
-    plt.legend()
-    plt.grid(True)
-    if confidence_type == 'highest_prob':
-        plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamic/expanding/highest_prob/kappa_thresholds.png')
-    elif confidence_type == 'difference_two_highest':
-        plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamic/expanding/difference_two_highest/kappa_thresholds.png')
-    else:
-        plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamic/expanding/neg_norm_shannon/kappa_thresholds.png')
-    plt.show()
+        mean_scores_across_cv = np.mean(scores_cv_splits, axis=0)
+        mean_kappa_across_cv = np.mean(kappa_cv_splits, axis=0)
+        if current_person == 1:
+            scores_across_subjects  = np.array(mean_scores_across_cv)
+            kappa_across_subjects  = np.array(mean_kappa_across_cv)
+        else:
+            scores_across_subjects = np.vstack((scores_across_subjects,np.array(mean_scores_across_cv)))
+            kappa_across_subjects = np.vstack((kappa_across_subjects,np.array(mean_kappa_across_cv)))
 
-def epochs_info(labels=False, tmin=False, tmax = False, length=False):
+        subjects_accuracies.append(np.mean(mean_scores_across_cv))
+        subjects_kappa.append(np.mean(mean_kappa_across_cv))
+
+    mean_scores_across_subjects = np.mean(scores_across_subjects, axis=0)
+    mean_kappa_across_subjects = np.mean(kappa_across_subjects, axis=0)
+    accuracy = mean_scores_across_subjects
+    kappa = mean_kappa_across_subjects
+
+    return subjects_accuracies, scores_across_subjects, subjects_kappa, kappa_across_subjects, accuracy, kappa
+
+def create_parameterslist(sfreq):
+    rng = np.random.RandomState(42)
+
+    #max intial_length and epxansion rate to be 1/4 of the trial during the MI task, or 1 seconds
+    initial_window_length = np.round(rng.uniform(0.1, 2, 10), 1) 
+    expansion_rate = np.round(rng.uniform(0.1, 2, 10), 1)
+
+    parameters = {  
+    # 1, 2 or 3 filters for each class, as we have 4 classes.
+    'csp_components': [4,8], # more than 8 was reading into noise - occipital lobe pattern
+    'initial_window_length': np.round(sfreq * initial_window_length).astype(int), 
+    'expansion_rate':  np.round(sfreq * expansion_rate).astype(int)
+    }
+
+    #Random search parameters - n_tier sets of parameter values
+    parameters_list = list(ParameterSampler(parameters, n_iter= 10, random_state=rng))
+    return parameters_list
+
+#Random search and return the best parameter values and its accuracy
+def hyperparameter_tuning (parameters_list, subjects):
+    mean_accuracy = 0
+    best_accuracy = 0
+    for n, param_set in enumerate(parameters_list):
+        csp_components = param_set['csp_components']
+        initial_window_length = param_set['initial_window_length'] 
+        expansion_rate =  param_set['expansion_rate']
+
+        _, _, _, _, accuracy, _ = run_expanding_classification_tuning_static(subjects, initial_window_length, expansion_rate, csp_components)
+        #only optimized for best accuracy here, maybe kappa too?
+        mean_accuracy = np.mean(accuracy)
+
+        print(f"Iteration {n+1}/{len(parameters_list)}: Mean accuracy for parameters {param_set} is {mean_accuracy}")
+
+        if mean_accuracy > best_accuracy:
+            best_accuracy = mean_accuracy
+            best_params_expanding = param_set
+
+    return best_params_expanding, best_accuracy
+
+#Access general epoch information
+def epochs_info(labels=False, tmin=False, length=False, info = False):
     global epochs_data
     global labels_data
-    if labels or tmax or tmin or length:
+    if labels or tmin or length or info:
         epochs, labels_data = make_data([1])
         epochs_data = epochs.get_data(copy=False)
+
     if labels and tmin:
         return labels_data, epochs.tmin
-    if labels and tmax:
-        return labels_data, epochs.tmin
-    if tmin and tmax:
-        return epochs.tmin, epochs.tmax
     elif labels and length:
         return labels_data, epochs_data.shape[2]
     elif tmin and length:
         return epochs.tmin, epochs_data.shape[2]
-    elif tmax and length:
-        return epochs.tmax, epochs_data.shape[2]
     elif labels:
         return labels_data
     elif tmin:
         return epochs.tmin
-    elif tmax:
-        return epochs.tmin
     elif length:
         return epochs_data.shape[2]
+    elif info:
+        return epochs.info
     else:
-        raise ValueError("At least one of 'labels', 'tmin', 'tmax' or 'length' must be True.")
-def plot_confusion_matrix(cm):
-    plt.figure()
-    #confusion matrix
-    displaycm = ConfusionMatrixDisplay(cm, display_labels=['left_hand', 'right_hand', 'tongue', 'feet'])
-    displaycm.plot()
-    plt.title(f"Confusion Matrix : LDA - Dynamic - Expanding model", fontsize=12)
-    plt.grid(False)
-    confusion_matrix_save_path = os.path.join(project_root, 'reports/figures/cumulative/LDA/dynamic/expanding/confusionMatrix.png')
-    plt.savefig(confusion_matrix_save_path)
-    plt.show()
-
-def write(accuracy_array, prediction_time_array, kappa_array):
-    f = open(project_root + "/reports/figures/cumulative/LDA/dynamic/expanding/lda_dynamic_expanding_accuracy.txt", "w")
-    f.write(f"Classification accuracy across all patience and thresholds: {np.mean(np.mean(accuracy_array, 0))}\n")
-    f.close()
-    g = open(project_root + "/reports/figures/cumulative/LDA/dynamic/expanding/lda_dynamic_expanding_kappa.txt", "w")
-    g.write(f"Average kappa across all patience and thresholds: {np.mean(np.mean(kappa_array, 0))}\n")
-    g.close()
-    h = open(project_root + "/reports/figures/cumulative/LDA/dynamic/expanding/lda_dynamic_expanding_prediction_time.txt", "w")
-    h.write(f"Average prediction times across all patience and thresholds: {np.mean(np.mean(prediction_time_array, 0))}\n")
-    h.close()
-
+        raise ValueError("At least one of 'labels', 'tmin', 'length', or 'info' must be True.")
+    
 #calculate the information transfer rate
 def calculate_best_itr(best_itr, best_itr_patience, best_itr_threshold, best_confidence_type, accuracy, patience, threshold, confidence_type):
     number_classes = 4 # we have classes in this dataset
@@ -349,31 +345,27 @@ def calculate_best_itr(best_itr, best_itr_patience, best_itr_threshold, best_con
         best_confidence_type = confidence_type
     return best_itr, best_itr_patience, best_itr_threshold, best_confidence_type
 
-def main_lda_dynamic_expanding():
-    subjects = [1, 2, 3, 4, 5, 6, 7, 8, 9] 
-    sfreq = 250         
-    confidence_types = ['highest_prob','difference_two_highest', 'neg_norm_shannon' ]
-    #Use tuned hyperparams from best params! later work
-    #best_params_intial_length = 175
-    #best_params_expansion_rate = 175 
-    #best_csp_components = 4
+def main():
+    subjects = [1,2,3,4,5,6,7,8,9]  # 9 subjects
+    sfreq = 250    # Sampling frequency - 250Hz
+    '''
+    Expanding phase
+    '''
+    #Hyperparameter_tuning for csp, and expanding window parameters using the static model
+    print("\n\n Hyperparameter tuning: \n\n")
+    parameters_list = create_parameterslist(sfreq)
+    best_params_expanding, best_accuracy = hyperparameter_tuning(parameters_list, subjects)
 
-    csp_components = 8
-    initial_window_length = 475 #int(sfreq * 0.5)  
-    expansion_rate = 225 #int(sfreq * 0.1)   
+    #Find optimal confidence type and patience from the expanding dynamic model using itr
+    csp_components = best_params_expanding['csp_components']
+    initial_window_length = best_params_expanding['initial_window_length']
+    expansion_rate = best_params_expanding['expansion_rate']
     w_start= np.arange(0, epochs_info(length= True) - initial_window_length, expansion_rate) 
-    print("w_start:", w_start )
-
+    confidence_types = ['highest_prob','difference_two_highest', 'neg_norm_shannon' ]
     patience_values = np.arange(1, len(w_start)) 
-    print("patience_values: ", patience_values)
-    print("len patience: ", len(patience_values))
     threshold_values = np.arange(0.1, 1, 0.1)
-    print("threshold_values: ", threshold_values)
-    print("len threshold: ", len(threshold_values))
-
     tmin, tmax = epochs_info(tmin = True, tmax = True)
-    print(f"\n\n\ntmin {tmin}, tmax {tmax}")
-    # evaluate everything for each of the 3 methods
+
     for confidence_type in confidence_types:
         # array to hold the average accuracy and prediction times with size len(confidence_type) x len(thre)
         accuracy_array = []
@@ -394,7 +386,7 @@ def main_lda_dynamic_expanding():
                 print(f"Threshold:{n+1}/{len(threshold_values)},  Patience: {m+1}/{len(patience_values)}")
                 print("\n")
                 #given the varaibles, provide the average accuracy and prediction times (early prediction)
-                accuracy, kappa, prediction_time, _, _, _ , _ = run_expanding_classification(subjects, threshold, patience, confidence_type, initial_window_length, expansion_rate, sfreq, csp_components)
+                accuracy, kappa, prediction_time, _, _, _ , _ = run_expanding_classification_dynamic(subjects, threshold, patience, confidence_type, initial_window_length, expansion_rate, sfreq, csp_components)
                 best_itr, best_itr_patience, best_itr_threshold, best_confidence_type = calculate_best_itr(best_itr, best_itr_patience, best_itr_threshold, best_confidence_type, accuracy, patience, threshold, confidence_type)
                 accuracy_row.append(accuracy)
                 prediction_time_row.append(prediction_time)
@@ -406,17 +398,22 @@ def main_lda_dynamic_expanding():
         accuracy_array = np.array(accuracy_array)
         prediction_time_array = np.array(prediction_time_array)
         kappa_array = np.array(kappa_array)
-    write(accuracy_array, prediction_time_array, kappa_array)
-    print(f"Classification of best patience and threshold based on itr")
-    accuracy, kappa, prediction_time, cm, subjects_accuracies, subjects_prediction_times, subjects_kappa = run_expanding_classification(subjects, best_itr_threshold, best_itr_patience, confidence_type, initial_window_length, expansion_rate, sfreq, csp_components)
-    #evaluate_and_plot(accuracy_array, prediction_time_array, kappa_array, threshold_values, patience_values, initial_window_length, sfreq, confidence_type)
-    plot_confusion_matrix(cm)
-    print(accuracy)
-    print(kappa)
-    print(prediction_time)
-    print(subjects_accuracies)
-    print(subjects_kappa)
-    print(subjects_prediction_times)
-    return accuracy, kappa, prediction_time, subjects_accuracies, subjects_prediction_times, subjects_kappa  #best expanding model
-if __name__ == "__main__": 
-    main_lda_dynamic_expanding()                
+
+    #vary the treshold and find accuracy kappa and pred time for the dynamic model
+    accuracy_dynamic = []
+    kappa_dynamic = []
+    prediction_time_dynamic = []
+    print("Finding dynamic model accuracy, kappa, and pred time, across thresholds")
+    for n, threshold in enumerate(threshold_values):
+        print(f"Threshold:{n+1}/{len(threshold_values)}")
+        #dynamic model evaluation
+        accuracy, kappa, prediction_time, _, _, _ , _ = run_expanding_classification_dynamic(subjects, threshold, patience, confidence_type, initial_window_length, expansion_rate, sfreq, csp_components)
+        accuracy_dynamic.append(accuracy)
+        kappa_dynamic.append(kappa)
+        prediction_time_dynamic.append(prediction_time)
+
+    print("Finding static model accuracy, and kappa for the given prediction times from the dynamic model")
+    #for each prediction time from the dynamic model, find the accuracy and kappa from the static model
+    for n, prediction_time in enumerate(prediction_time_dynamic):
+        print(f"Prediction time:{n+1}/{len(prediction_time_dynamic)}")
+        

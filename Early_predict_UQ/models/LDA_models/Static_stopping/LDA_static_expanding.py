@@ -59,7 +59,7 @@ def run_expanding_classification_tuning(subjects, initial_window_length, expansi
             kappa_across_epochs = []
             for n, window_start in enumerate(w_start):
                 window_length = initial_window_length + n * expansion_rate
-                X_test_window = csp.transform(train_data[test_idx][:, :,  window_start:(window_start + window_length)])
+                X_test_window = csp.transform(train_data[test_idx][:, :,  w_start[0]:window_length])
                 #accuracy
                 score = lda.score(X_test_window, y_test)
                 scores_across_epochs.append(score)
@@ -137,7 +137,7 @@ def run_expanding_classification(subjects, initial_window_length, expansion_rate
         w_start = np.arange(0, test_data.shape[2] - initial_window_length, expansion_rate)
         for n, window_start in enumerate(w_start):
             window_length = initial_window_length + n * expansion_rate
-            X_test_window = csp.transform(test_data[:, :, window_start:(window_start + window_length)])
+            X_test_window = csp.transform(test_data[:, :, w_start[0]: window_length])
             
             # Calculate accuracy for the window
             score = lda.score(X_test_window, test_labels)
@@ -193,7 +193,7 @@ def create_parameterslist(sfreq):
     }
 
     #Random search parameters - n_tier sets of parameter values
-    parameters_list = list(ParameterSampler(parameters, n_iter= 60, random_state=rng))
+    parameters_list = list(ParameterSampler(parameters, n_iter= 10, random_state=rng))
     return parameters_list
 
 #Random search and return the best parameter values and its accuracy
@@ -218,12 +218,12 @@ def hyperparameter_tuning (parameters_list, subjects):
     return best_params, best_accuracy
 
 #Plot the results, and write to files
-def evaluate_and_plot(best_params, best_accuracy, accuracy, subjects_accuracies, scores_across_subjects, kappa, subjects_kappa, kappa_across_subjects, sfreq, cm, csp):
+def evaluate_and_plot(best_params, best_accuracy, accuracy, subjects_accuracies, scores_across_subjects, kappa, subjects_kappa, kappa_across_subjects, sfreq):
     print("Best params:", best_params)
     print("Best accuracy", best_accuracy)
     print("subjects_kappa", subjects_kappa)
     print("subjects_accuracy", subjects_accuracies)
-    h = open(project_root + "/reports/figures/cumulitive/LDA/static/expanding/lda_static_expanding_best_params.txt", "w")
+    h = open(project_root + "/reports/figures/cumulative/LDA/static/expanding/lda_static_expanding_best_params.txt", "w")
     h.write(f"Best params: {best_params}\n")
     h.close()
     print("Classification accuracy:", np.mean(accuracy))
@@ -234,7 +234,7 @@ def evaluate_and_plot(best_params, best_accuracy, accuracy, subjects_accuracies,
     subject_tuples = [(i+1, acc) for i, acc in enumerate(subjects_accuracies)]
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
 
-    f = open(project_root + "/reports/figures/cumulitive/LDA/static/expanding/lda_static_expanding_accuracy_by_subject.txt", "w")
+    f = open(project_root + "/reports/figures/cumulative/LDA/static/expanding/lda_static_expanding_accuracy_by_subject.txt", "w")
     f.write(f"Classification accuracy: {np.mean(accuracy)}\n")
     for subject, subject_accuracy in sorted_subjects:
         f.write(f"Subject {subject}: Accuracy {subject_accuracy} \n")
@@ -242,7 +242,7 @@ def evaluate_and_plot(best_params, best_accuracy, accuracy, subjects_accuracies,
     f.close()
 
     #Mean kappa for each subject . could make boxplots out of these - comparing the different models
-    g = open(project_root + "/reports/figures/cumulitive/LDA/static/expanding/lda_static_expanding_kappa_by_subject.txt", "w")
+    g = open(project_root + "/reports/figures/cumulative/LDA/static/expanding/lda_static_expanding_kappa_by_subject.txt", "w")
     g.write(f"Kappa: {np.mean(kappa)}\n")
     subject_tuples = [(i+1, acc) for i, acc in enumerate(subjects_kappa)]
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
@@ -261,21 +261,7 @@ def evaluate_and_plot(best_params, best_accuracy, accuracy, subjects_accuracies,
     prediction_times = np.arange(0, epochs_data.shape[2] - best_params['initial_window_length'], best_params['expansion_rate'])
     prediction_times  = (prediction_times + (best_params['initial_window_length'] / tmin)) / sfreq + tmin
 
-    
-    ## csp patterns
-    info = epochs_info(info = True)
-    csp.plot_patterns(info, ch_type="eeg", units="Patterns (AU)", size=1.5)
-    plt.savefig(project_root + '/reports/figures/cumulitive/LDA/static/expanding/lda_static_expanding_cspPatterns.png')
-    plt.show()
-
-    ##confusion  matrix
-    displaycm = ConfusionMatrixDisplay(cm, display_labels = classes)
-    displaycm.plot()
-    plt.title('Confusion Matrix: LDA - Static model - Expanding window')
-    plt.grid(False)
-    plt.savefig(project_root + '/reports/figures/cumulitive/LDA/static/expanding/lda_static_expanding_confusionMatrix.png')
-    plt.show()
-
+    plt.figure()
     #Accuracy for each subject
     plt.xlabel("Prediction time")
     plt.ylabel("Classification accuracy")
@@ -288,10 +274,10 @@ def evaluate_and_plot(best_params, best_accuracy, accuracy, subjects_accuracies,
     plt.title('Accuracy over time for each subject: LDA - Static model - Expanding window')
     plt.legend()
     plt.grid(True)
-    plt.savefig(project_root + '/reports/figures/cumulitive/LDA/static/expanding/lda_static_expanding_accuracy_over_time_subjects.png')
+    plt.savefig(project_root + '/reports/figures/cumulative/LDA/static/expanding/lda_static_expanding_accuracy_over_time_subjects.png')
     plt.show()  
 
-
+    plt.figure()
     #Kappa for each subject
     plt.xlabel("Prediction time")
     plt.ylabel("Kappa")
@@ -303,11 +289,12 @@ def evaluate_and_plot(best_params, best_accuracy, accuracy, subjects_accuracies,
     plt.title('Kappa over time for each subject: LDA - Static model - Expanding window')
     plt.legend()
     plt.grid(True)
-    plt.savefig(project_root + '/reports/figures/cumulitive/LDA/static/expanding/lda_static_expanding_accuracy_over_time_subjects.png')
+    plt.savefig(project_root + '/reports/figures/cumulative/LDA/static/expanding/lda_static_expanding_kappa_over_time_subjects.png')
     plt.show()
 
     #Accuracy
     accuracy_array = np.array(accuracy)
+    plt.figure()
     plt.xlabel("Prediction time")
     plt.ylabel("Classification accuracy")
     plt.plot(prediction_times, accuracy_array)
@@ -316,11 +303,12 @@ def evaluate_and_plot(best_params, best_accuracy, accuracy, subjects_accuracies,
     plt.title('Accuracy over time: LDA - Static model - Expanding window')
     plt.legend()
     plt.grid(True)
-    plt.savefig(project_root + '/reports/figures/cumulitive/LDA/static/expanding/lda_static_expanding_accuracy_over_time.png')
+    plt.savefig(project_root + '/reports/figures/cumulative/LDA/static/expanding/lda_static_expanding_accuracy_over_time.png')
     plt.show()
 
     #Kappa
     kappa_array = np.array(kappa)
+    plt.figure()
     plt.xlabel("Prediction time")
     plt.ylabel("Kappa")
     #whats a bad line?
@@ -329,7 +317,25 @@ def evaluate_and_plot(best_params, best_accuracy, accuracy, subjects_accuracies,
     plt.title('Kappa over time: LDA - Static model - Expanding window')
     plt.legend()
     plt.grid(True)
-    plt.savefig(project_root + '/reports/figures/cumulitive/LDA/static/expanding/lda_static_expanding_kappa_over_time.png')
+    plt.savefig(project_root + '/reports/figures/cumulative/LDA/static/expanding/lda_static_expanding_kappa_over_time.png')
+    plt.show()
+def csp_patterns(csp):
+    plt.figure()
+     ## csp patterns
+    info = epochs_info(info = True)
+    csp.plot_patterns(info, ch_type="eeg", units="Patterns (AU)", size=1.5)
+    plt.savefig(project_root + '/reports/figures/cumulative/LDA/static/expanding/lda_static_expanding_cspPatterns.png')
+    plt.show()
+    
+def plot_confusion_matrix(cm):
+    plt.figure()
+    #confusion matrix
+    displaycm = ConfusionMatrixDisplay(cm, display_labels=['left_hand', 'right_hand', 'tongue', 'feet'])
+    displaycm.plot()
+    plt.title(f"Confusion Matrix : LDA - Dynamic - Expanding model", fontsize=12)
+    plt.grid(False)
+    confusion_matrix_save_path = os.path.join(project_root, 'reports/figures/cumulative/LDA/dynamic/expanding/confusionMatrix.png')
+    plt.savefig(confusion_matrix_save_path)
     plt.show()
 
 #Access general epoch information
@@ -378,8 +384,9 @@ def main_static_expanding():
     subjects_accuracies, scores_across_subjects, subjects_kappa, kappa_across_subjects, accuracy, kappa, cm, csp = run_expanding_classification(subjects, best_params['initial_window_length'], best_params['expansion_rate'], best_params['csp_components'])
 
     #evaluate and plot
-    evaluate_and_plot(best_params, best_accuracy, accuracy, subjects_accuracies, scores_across_subjects, kappa, subjects_kappa, kappa_across_subjects, sfreq, cm, csp)
-
+    evaluate_and_plot(best_params, best_accuracy, accuracy, subjects_accuracies, scores_across_subjects, kappa, subjects_kappa, kappa_across_subjects, sfreq)
+    csp_patterns(csp)
+    plot_confusion_matrix(cm)
     return best_params
 
 

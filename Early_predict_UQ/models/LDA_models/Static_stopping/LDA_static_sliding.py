@@ -1,3 +1,4 @@
+from calendar import c
 import os
 import sys
 import numpy as np
@@ -205,7 +206,7 @@ def create_parameterslist(sfreq):
     w_step_values = np.round(np.array(w_step_values) * sfreq).astype(int)
     
     parameters = {  
-        'csp_components': [4, 8, 12], 
+        'csp_components': [4, 8], 
         'w_length': w_length_values, 
         'w_step': w_step_values
     }
@@ -235,7 +236,7 @@ def hyperparameter_tuning (parameters_list, subjects):
 
     return best_params, best_accuracy
 
-def evaluate_and_plot(best_params, best_accuracy, accuracy, subjects_accuracies, scores_across_subjects, kappa, subjects_kappa, kappa_across_subjects, sfreq, cm, csp):
+def evaluate_and_plot(best_params, best_accuracy, accuracy, subjects_accuracies, scores_across_subjects, kappa, subjects_kappa, kappa_across_subjects, sfreq):
     print("Best params:", best_params)
     print("Best accuracy", best_accuracy)
     print("subjects_kappa", subjects_kappa)
@@ -279,23 +280,8 @@ def evaluate_and_plot(best_params, best_accuracy, accuracy, subjects_accuracies,
     prediction_times = np.arange(0, epochs_data.shape[2] - best_params['w_length'], best_params['w_step'])
     prediction_times  = (prediction_times + (best_params['w_length'] / tmin)) / sfreq + tmin
 
-
-    ## csp patterns
-    info = epochs_info(info = True)
-    csp.plot_patterns(info, ch_type="eeg", units="Patterns (AU)", size=1.5)
-    plt.savefig(project_root + '/reports/figures/cumulitive/LDA/static/sliding/lda_static_sliding_cspPatterns.png')
-    plt.show()
-
-    ##confusion  matrix
-    displaycm = ConfusionMatrixDisplay(cm, display_labels = classes)
-    displaycm.plot()
-    plt.title('Confusion Matrix: LDA - Static model - Expanding window')
-    plt.grid(False)
-    plt.savefig(project_root + '/reports/figures/cumulitive/LDA/static/sliding/lda_static_sliding_confusionMatrix.png')
-    plt.show()
-
-
     #Accuracy for each subject
+    plt.figure()
     plt.xlabel("Prediction time")
     plt.ylabel("Classification accuracy")
 
@@ -311,6 +297,7 @@ def evaluate_and_plot(best_params, best_accuracy, accuracy, subjects_accuracies,
     plt.show()  
 
     #Kappa for each subject
+    plt.figure()
     plt.xlabel("Prediction time")
     plt.ylabel("Kappa")
 
@@ -326,6 +313,7 @@ def evaluate_and_plot(best_params, best_accuracy, accuracy, subjects_accuracies,
 
     #Accuracy
     accuracy_array = np.array(accuracy)
+    plt.figure()
     plt.xlabel("Prediction time")
     plt.ylabel("Classification accuracy")
     plt.plot(prediction_times, accuracy_array)
@@ -339,6 +327,7 @@ def evaluate_and_plot(best_params, best_accuracy, accuracy, subjects_accuracies,
 
     #Kappa
     kappa_array = np.array(kappa)
+    plt.figure()
     plt.xlabel("Prediction time")
     plt.ylabel("Kappa")
     #whats a bad line?
@@ -348,6 +337,25 @@ def evaluate_and_plot(best_params, best_accuracy, accuracy, subjects_accuracies,
     plt.legend()
     plt.grid(True)
     plt.savefig(project_root + '/reports/figures/cumulitive/LDA/static/sliding/lda_static_sliding_kappa_over_time.png')
+    plt.show()
+
+def csp_patterns(csp):
+     ## csp patterns
+    plt.figure()
+    info = epochs_info(info = True)
+    csp.plot_patterns(info, ch_type="eeg", units="Patterns (AU)", size=1.5)
+    plt.savefig(project_root + '/reports/figures/cumulative/LDA/static/expanding/lda_static_expanding_cspPatterns.png')
+    plt.show()
+    
+def plot_confusion_matrix(cm):
+    plt.figure()
+    #confusion matrix
+    displaycm = ConfusionMatrixDisplay(cm, display_labels=['left_hand', 'right_hand', 'tongue', 'feet'])
+    displaycm.plot()
+    plt.title(f"Confusion Matrix : LDA - Dynamic - Expanding model", fontsize=12)
+    plt.grid(False)
+    confusion_matrix_save_path = os.path.join(project_root, 'reports/figures/cumulative/LDA/dynamic/expanding/confusionMatrix.png')
+    plt.savefig(confusion_matrix_save_path)
     plt.show()
 
 #Access general epoch information
@@ -383,7 +391,7 @@ def epochs_info(labels=False, tmin=False, length=False, info = False):
 
 '''
 def main_static_sliding():
-    subjects = [1, 3]   # 9 subjects
+    subjects = [1, 2, 3, 4, 5, 6, 7, 8, 9]   # 9 subjects
     sfreq = 250     # Sampling frequency - 250Hz
 
     #Hyperparameter_tuning
@@ -397,8 +405,9 @@ def main_static_sliding():
     subjects_accuracies, scores_across_subjects, subjects_kappa, kappa_across_subjects, accuracy, kappa, cm, csp = run_sliding_classification(subjects, best_params['w_length'], best_params['w_step'], best_params['csp_components'])
 
     #evaluate and plot
-    evaluate_and_plot(best_params, best_accuracy, accuracy, subjects_accuracies, scores_across_subjects, kappa, subjects_kappa, kappa_across_subjects, sfreq, cm, csp)
-
+    evaluate_and_plot(best_params, best_accuracy, accuracy, subjects_accuracies, scores_across_subjects, kappa, subjects_kappa, kappa_across_subjects, sfreq)
+    csp_patterns(csp)
+    plot_confusion_matrix(cm)
     return best_params
 
 if __name__ == "__main__":
