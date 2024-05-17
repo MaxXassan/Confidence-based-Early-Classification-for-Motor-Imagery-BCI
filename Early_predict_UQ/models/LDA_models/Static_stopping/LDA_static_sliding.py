@@ -232,9 +232,9 @@ def hyperparameter_tuning (parameters_list, subjects):
 
         if mean_accuracy > best_accuracy:
             best_accuracy = mean_accuracy
-            best_params = param_set
+            best_params_sliding = param_set
 
-    return best_params, best_accuracy
+    return best_params_sliding, best_accuracy
 
 def evaluate_and_plot(best_params, best_accuracy, accuracy, subjects_accuracies, scores_across_subjects, kappa, subjects_kappa, kappa_across_subjects, sfreq):
     print("Best params:", best_params)

@@ -61,7 +61,7 @@ def early_pred(probabilities, predict, numTimesThresholdCrossed, patience, confi
     return predict, numTimesThresholdCrossed, previous_class_index
 
 #Given sliding window and stopping values, we average the accuracy and prediction time for the model
-def run_sliding_classification(subjects, threshold, patience, confidence_type, w_length, w_step, sfreq):
+def run_sliding_classification(subjects, threshold, patience, confidence_type, w_length, w_step, sfreq,):
     scores_across_subjects = []
     prediction_time_across_subjects = []
     current_person = 0

@@ -95,7 +95,7 @@ def run_expanding_classification_tuning(subjects, initial_window_length, expansi
 
 #Expanding window - classification
    ##calculate kappa and accuracy at each window step
-def run_expanding_classification(subjects, initial_window_length, expansion_rate, csp_components):
+def run_expanding_classification(subjects, initial_window_length, expansion_rate, csp_components, pred_times = False):
     scores_across_subjects = []
     kappa_across_subjects = []
 
@@ -135,28 +135,52 @@ def run_expanding_classification(subjects, initial_window_length, expansion_rate
         scores_across_epochs = []
         kappa_across_epochs = []
         w_start = np.arange(0, test_data.shape[2] - initial_window_length, expansion_rate)
-        for n, window_start in enumerate(w_start):
-            window_length = initial_window_length + n * expansion_rate
-            X_test_window = csp.transform(test_data[:, :, w_start[0]: window_length])
-            
-            # Calculate accuracy for the window
-            score = lda.score(X_test_window, test_labels)
-            scores_across_epochs.append(score)
+        if pred_times:
+            for n, window_start in enumerate(pred_times):
+                window_length = pred_times[n]
+                X_test_window = csp.transform(test_data[:, :, w_start[0]: window_length])
+                
+                # Calculate accuracy for the window
+                score = lda.score(X_test_window, test_labels)
+                scores_across_epochs.append(score)
 
-            # Calculate kappa for the window
-            kappa = cohen_kappa_score(lda.predict(X_test_window), test_labels)
-            kappa_across_epochs.append(kappa)
-            
-            #Confusion matrix
-            predictions = lda.predict(X_test_window)
-            cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
-            number_cm +=1
-        if current_person == 1:
-            scores_across_subjects  = np.array(scores_across_epochs)
-            kappa_across_subjects = np.array(kappa_across_epochs)
+                # Calculate kappa for the window
+                kappa = cohen_kappa_score(lda.predict(X_test_window), test_labels)
+                kappa_across_epochs.append(kappa)
+                
+                #Confusion matrix
+                predictions = lda.predict(X_test_window)
+                cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
+                number_cm +=1
+            if current_person == 1:
+                scores_across_subjects  = np.array(scores_across_epochs)
+                kappa_across_subjects = np.array(kappa_across_epochs)
+            else:
+                scores_across_subjects = np.vstack((scores_across_subjects,np.array(scores_across_epochs)))
+                kappa_across_subjects = np.vstack((kappa_across_subjects,np.array(kappa_across_epochs)))
         else:
-            scores_across_subjects = np.vstack((scores_across_subjects,np.array(scores_across_epochs)))
-            kappa_across_subjects = np.vstack((kappa_across_subjects,np.array(kappa_across_epochs)))
+            for n, window_start in enumerate(w_start):
+                window_length = initial_window_length + n * expansion_rate
+                X_test_window = csp.transform(test_data[:, :, w_start[0]: window_length])
+                
+                # Calculate accuracy for the window
+                score = lda.score(X_test_window, test_labels)
+                scores_across_epochs.append(score)
+
+                # Calculate kappa for the window
+                kappa = cohen_kappa_score(lda.predict(X_test_window), test_labels)
+                kappa_across_epochs.append(kappa)
+                
+                #Confusion matrix
+                predictions = lda.predict(X_test_window)
+                cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
+                number_cm +=1
+            if current_person == 1:
+                scores_across_subjects  = np.array(scores_across_epochs)
+                kappa_across_subjects = np.array(kappa_across_epochs)
+            else:
+                scores_across_subjects = np.vstack((scores_across_subjects,np.array(scores_across_epochs)))
+                kappa_across_subjects = np.vstack((kappa_across_subjects,np.array(kappa_across_epochs)))
         #mean accuracy and kappa for each subject
         subjects_accuracies.append(np.mean(scores_across_epochs))
         subjects_kappa.append(np.mean(kappa_across_epochs))
