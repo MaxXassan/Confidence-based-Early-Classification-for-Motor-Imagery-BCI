@@ -711,11 +711,12 @@ def main_lda_sliding():
     return best_itr
 '''
 to do:
-plot the accuracy and kappa plots 
-print the chosen traversal methods, csp, window parameters, confidence type, patience, 
+add error bars to the accuracy and kappa plots, title and no title
+- need to get multiple measurements from the models for each time point, to calculate the Standard erro of the mean
+fix confusion matrix plot - make the numbers numbers make sense, label
+add itr plot
 introduce way of finding best between sliding vs expanding - make another file for sliding, and output best_itr and use the file that has the best itr
-table (dynamic vs static) with pr subject accuracy and kappa(and maybe pred time, but only dynamic has that)
-confusion matrix
+run full models
 '''
 
 if __name__ == "__main__":
