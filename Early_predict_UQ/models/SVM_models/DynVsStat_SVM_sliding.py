@@ -548,7 +548,7 @@ def main_svm_sliding():
     best_params_sliding, best_accuracy = hyperparameter_tuning(parameters_list, subjects) #tuned on accuracy as we dont have pred time for itr
     print("\n\n Hyperparameter tuning (1): completed \n\n")
     csp_components = best_params_sliding['csp_components']
-    w_length = best_params_sliding['csp_components']
+    w_length = best_params_sliding['w_length']
     w_step = best_params_sliding['w_step']
     c = best_params_sliding['C']
     kernel = best_params_sliding['kernel']
