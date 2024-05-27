@@ -714,7 +714,7 @@ def main_lda_sliding():
     sem_pred_time_dynamic = [np.std(times) / np.sqrt(len(times)) for times in np.array(prediction_time_dynamic_total)]
     sem_accuracy_stat =  [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(scores_across_subjects_stat).T] #(scores_across_subjects_stat: (subjects, predtimes)) - 9 subjects, statically for each given prediction time from the dyn model(correlates to a specific threshold value)
     plt.figure()
-    plt.xlabel('Prediction time')
+    plt.xlabel('Prediction time (sec)')
     plt.ylabel('Accuracy')
     plt.grid(True)
     onset = tmin
@@ -722,9 +722,9 @@ def main_lda_sliding():
     plt.axvline(onset, linestyle="--", color="r", label="Onset")
     plt.axvline(offset, linestyle="--", color="b", label="Offset")
     plt.errorbar(prediction_time_dynamic, accuracy_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_accuracy_dynamic, label = "Dynamic model", fmt='o', color='blue', ecolor='red', linestyle='-', linewidth=2, capsize=3)
-    plt.errorbar(prediction_time_dynamic, accuracy_static, xerr = sem_pred_time_dynamic, yerr= sem_accuracy_stat, label = "Static model", fmt='s', color='green', ecolor='yellow', linestyle='-', linewidth=2, capsize=3)
+    plt.errorbar(prediction_time_dynamic, accuracy_static, xerr = sem_pred_time_dynamic, yerr= sem_accuracy_stat, label = "Static model", fmt='s', color='green', ecolor='orange', linestyle='-', linewidth=2, capsize=3)
     plt.title("Sliding LDA models: Accuracy vs Pred time")
-    plt.axhline(0.25, label= "chance")
+    plt.axhline(0.25, label= "Chance")
     plt.legend()
     plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamicVSstatic/SlidingAccuracy.png')
     plt.show()
@@ -733,7 +733,7 @@ def main_lda_sliding():
     sem_kappa_dynamic = [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(kappa_dynamic_total)]
     sem_kappa_stat =  [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(kappa_across_subjects_stat).T]
     plt.figure()
-    plt.xlabel('Prediction time')
+    plt.xlabel('Prediction time (sec)')
     plt.ylabel('Kappa')
     plt.grid(True)
     tmin, tmax = epochs_info(tmin = True, tmax = True)
@@ -741,8 +741,8 @@ def main_lda_sliding():
     offset = tmax
     plt.axvline(onset, linestyle="--", color="r", label="Onset")
     plt.axvline(offset, linestyle="--", color="b", label="Offset")
-    plt.errorbar(prediction_time_dynamic, kappa_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_kappa_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='green', linestyle='-', linewidth=2, capsize=3)
-    plt.errorbar(prediction_time_dynamic, kappa_static, xerr = sem_pred_time_dynamic, yerr= sem_kappa_stat, label = "Static model", fmt='s', color='orange', ecolor='red', linestyle='--', linewidth=2, capsize=3)
+    plt.errorbar(prediction_time_dynamic, kappa_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_kappa_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='red', linestyle='-', linewidth=2, capsize=3)
+    plt.errorbar(prediction_time_dynamic, kappa_static, xerr = sem_pred_time_dynamic, yerr= sem_kappa_stat, label = "Static model", fmt='s', color='green', ecolor='orange', linestyle='-', linewidth=2, capsize=3)
     plt.title("Sliding LDA models: Kappa vs Pred time")
     plt.legend()
     plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamicVSstatic/SlidingKappa.png')
@@ -752,7 +752,7 @@ def main_lda_sliding():
     sem_itr_dynamic = [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(itr_dynamic_total)]
     sem_itr_stat =  [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(itrs_across_subjects_stat).T]
     plt.figure()
-    plt.xlabel('Prediction time')
+    plt.xlabel('Prediction time (sec)')
     plt.ylabel('Information transfer rate (bits/min)')
     plt.grid(True)
     tmin, tmax = epochs_info(tmin = True, tmax = True)
@@ -760,8 +760,8 @@ def main_lda_sliding():
     offset = tmax
     plt.axvline(onset, linestyle="--", color="r", label="Onset")
     plt.axvline(offset, linestyle="--", color="b", label="Offset")
-    plt.errorbar(prediction_time_dynamic, itr_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_itr_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='green', linestyle='-', linewidth=2, capsize=3)
-    plt.errorbar(prediction_time_dynamic, itr_static, xerr = sem_pred_time_dynamic, yerr= sem_itr_stat, label = "Static model", fmt='s', color='orange', ecolor='red', linestyle='--', linewidth=2, capsize=3)
+    plt.errorbar(prediction_time_dynamic, itr_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_itr_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='red', linestyle='-', linewidth=2, capsize=3)
+    plt.errorbar(prediction_time_dynamic, itr_static, xerr = sem_pred_time_dynamic, yerr= sem_itr_stat, label = "Static model", fmt='s', color='green', ecolor='orange', linestyle='-', linewidth=2, capsize=3)
     plt.title("Sliding LDA models: Information Transfer rate vs Pred time")
     plt.legend()
     plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamicVSstatic/SlidingItr.png')
