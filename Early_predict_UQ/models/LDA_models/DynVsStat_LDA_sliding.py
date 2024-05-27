@@ -83,10 +83,12 @@ def run_sliding_classification_dynamic(subjects, threshold, patience, confidence
     scores_across_subjects = []
     kappa_across_subjects = []
     prediction_time_across_subjects = []
+    itrs_across_subjects = []
 
     subjects_accuracies = []
     subjects_kappa = []
     subjects_prediction_times = []
+    subjects_itrs = []
     #confusion matrix
     number_cm = 0 
     cm = np.zeros((4,4))
@@ -122,6 +124,7 @@ def run_sliding_classification_dynamic(subjects, threshold, patience, confidence
         scores_across_epochs = []
         kappa_across_epochs = []
         predict_time_across_epochs = []
+        itrs_across_epochs = []
         for epoch_idx in range(len(test_indexes)):
             previous_class_index = None
             predict = False
@@ -145,7 +148,7 @@ def run_sliding_classification_dynamic(subjects, threshold, patience, confidence
                     kappa_across_epochs.append(kappa)
 
                     #prediction time
-                    predict_time = n
+                    predict_time = n + w_length
                     predict_time_across_epochs.append(predict_time)
 
                     #Confusion matrix
@@ -164,19 +167,17 @@ def run_sliding_classification_dynamic(subjects, threshold, patience, confidence
 
                     #prediction time
                     #predict_time = n/250 +epochs.tmin()
-                    predict_time_last = n #start of the last window
+                    predict_time_last = n + w_length #end of the last window
                     #print(f"couldnt predict early, pred time in seconds: {predict_time_last/sfreq + epochs.tmin} with w_length: {w_length/sfreq}")
                     predict_time_across_epochs.append(predict_time_last)
-                    
+
                     #Confusion matrix
                     predictions = lda.predict(X_test_window)
                     cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
                     number_cm +=1
-
-        subjects_accuracies.append(np.mean(scores_across_epochs))
-        subjects_prediction_times.append(np.mean(predict_time_across_epochs))
-        subjects_kappa.append(np.mean(kappa_across_epochs))
-
+        _, _, _, _, _, _, itr = calculate_best_itr_dyn(best_itr = 0, accuracy = np.mean(scores_across_epochs), prediction_time = np.mean(predict_time_across_epochs), best_subjects_accuracies_dyn= None, best_subjects_prediction_times_dyn= None, best_subjects_kappa_dyn= None, best_subjects_itrs_dyn= None, best_cm_dyn= None, subjects_accuracies_dyn= None, subjects_prediction_times_dyn= None, subjects_kappa_dyn= None, subjects_itrs_dyn = None, cm_dyn = None)
+        itrs_across_epochs = itr #single number
+        itrs_across_subjects.append(itr)
         if current_person == 1:
             scores_across_subjects  = scores_across_epochs
             prediction_time_across_subjects = predict_time_across_epochs
@@ -185,22 +186,29 @@ def run_sliding_classification_dynamic(subjects, threshold, patience, confidence
             scores_across_subjects = np.vstack((scores_across_subjects, scores_across_epochs))
             prediction_time_across_subjects = np.vstack((prediction_time_across_subjects, predict_time_across_epochs))
             kappa_across_subjects = np.vstack((kappa_across_subjects, kappa_across_epochs))
+        subjects_accuracies.append(np.mean(scores_across_epochs))
+        subjects_prediction_times.append(np.mean(predict_time_across_epochs))
+        subjects_kappa.append(np.mean(kappa_across_epochs))
+        subjects_itrs = np.append(subjects_itrs, itrs_across_epochs)
     #accuracy
     mean_scores_across_subjects = np.mean(scores_across_subjects, axis=0)
     accuracy = np.mean(mean_scores_across_subjects) #single number
     #kappa
     mean_kappa_across_subjects = np.mean(kappa_across_subjects, axis=0)
-    kappa = np.mean(mean_kappa_across_subjects)
+    kappa = np.mean(mean_kappa_across_subjects) #sinlge number
     #prediction time
     mean_prediction_time_across_subjects = np.mean(prediction_time_across_subjects, axis=0)
     prediction_time = np.mean(mean_prediction_time_across_subjects) #single number
-    # calculate average confusion 
+    #itr
+    mean_itr_across_subjects = np.array(itrs_across_subjects)
+    itr = np.mean(mean_itr_across_subjects) #single number
+    ## calculate average confusion 
     cm = np.divide(cm, number_cm)
-    return accuracy, kappa, prediction_time, cm, subjects_accuracies, subjects_prediction_times, subjects_kappa, mean_scores_across_subjects, mean_kappa_across_subjects,mean_prediction_time_across_subjects
+    return accuracy, kappa, prediction_time, itr, cm, subjects_accuracies, subjects_prediction_times, subjects_kappa, subjects_itrs, mean_scores_across_subjects, mean_kappa_across_subjects, mean_prediction_time_across_subjects, mean_itr_across_subjects
 
 #Sldiding window - classification - tuning using kfold cross validation
    ##calculate kappa and accuracy at each window step
-def run_sliding_classification_tuning_static(subjects, w_length, w_step, csp_components, pred_times = False):
+def run_sliding_classification_tuning_static(subjects, w_length, w_step, csp_components):
     scores_across_subjects = []
     kappa_across_subjects = []
 
@@ -236,39 +244,21 @@ def run_sliding_classification_tuning_static(subjects, w_length, w_step, csp_com
             w_start = np.arange(0, train_data.shape[2] - w_length, w_step) 
             scores_across_epochs = []
             kappa_across_epochs = []
-            if np.array(pred_times).any(): #Never ran
-                #loop over the given prediction times by the dynamic model
-                pred_times = np.round(np.array(pred_times)).astype(int)
-                for n in pred_times:  #250 is the sample frequency
-                    X_test_window = csp.transform(train_data[test_idx][:, :, n:(n + w_length)])
-                    #accuracy
-                    score = lda.score(X_test_window, y_test)
-                    scores_across_epochs.append(score)
-                    #kappa
-                    kappa = cohen_kappa_score(lda.predict(X_test_window), y_test) 
-                    kappa_across_epochs.append(kappa)
-                if current_cv == 1:
-                    scores_cv_splits = np.array(scores_across_epochs)
-                    kappa_cv_splits = np.array(kappa_across_epochs)
-                else:
-                    scores_cv_splits = np.vstack((scores_cv_splits,np.array(scores_across_epochs)))
-                    kappa_cv_splits = np.vstack((kappa_cv_splits,np.array(kappa_across_epochs)))
-            else:
-                for n in w_start:
-                    X_test_window = csp.transform(train_data[test_idx][:, :, n:(n + w_length)])
-                    #accuracy
-                    score = lda.score(X_test_window, y_test)
-                    scores_across_epochs.append(score)
+            for n in w_start:
+                X_test_window = csp.transform(train_data[test_idx][:, :, n:(n + w_length)])
+                #accuracy
+                score = lda.score(X_test_window, y_test)
+                scores_across_epochs.append(score)
 
-                    #kappa
-                    kappa = cohen_kappa_score(lda.predict(X_test_window), y_test) 
-                    kappa_across_epochs.append(kappa)
-                if current_cv == 1:
-                    scores_cv_splits = np.array(scores_across_epochs)
-                    kappa_cv_splits = np.array(kappa_across_epochs)
-                else:
-                    scores_cv_splits = np.vstack((scores_cv_splits,np.array(scores_across_epochs)))
-                    kappa_cv_splits = np.vstack((kappa_cv_splits,np.array(kappa_across_epochs)))
+                #kappa
+                kappa = cohen_kappa_score(lda.predict(X_test_window), y_test) 
+                kappa_across_epochs.append(kappa)
+            if current_cv == 1:
+                scores_cv_splits = np.array(scores_across_epochs)
+                kappa_cv_splits = np.array(kappa_across_epochs)
+            else:
+                scores_cv_splits = np.vstack((scores_cv_splits,np.array(scores_across_epochs)))
+                kappa_cv_splits = np.vstack((kappa_cv_splits,np.array(kappa_across_epochs)))
         mean_scores_across_cv = np.mean(scores_cv_splits, axis=0)
         mean_kappa_across_cv = np.mean(kappa_cv_splits, axis=0)
         if current_person == 1:
@@ -288,12 +278,14 @@ def run_sliding_classification_tuning_static(subjects, w_length, w_step, csp_com
 
     return subjects_accuracies, scores_across_subjects, subjects_kappa, kappa_across_subjects, accuracy, kappa
  
-def run_sliding_classification_static(subjects, w_length, w_step, csp_components, pred_times = False):
+def run_sliding_classification_static(subjects, w_length, w_step, csp_components, pred_times):
     scores_across_subjects = []
     kappa_across_subjects = []
+    itrs_across_subjects = []
 
     subjects_accuracies = []
     subjects_kappa = []
+    subjects_itrs = []
     current_person = 0
 
     #confusion matrix
@@ -327,66 +319,53 @@ def run_sliding_classification_static(subjects, w_length, w_step, csp_components
         # Initialize lists to store scores and kappa values for each window
         scores_across_epochs = []
         kappa_across_epochs = []
-        w_start = np.arange(0, train_data.shape[2] - w_length, w_step)
-        if np.array(pred_times).any():
-            pred_times = np.round(np.array(pred_times)).astype(int)
-            for n in pred_times:
+        itrs_across_epochs = []
+        pred_times = np.round(np.array(pred_times)).astype(int)
+        for n in pred_times:
 
-                X_test_window = csp.transform(test_data[:, :, n:(n + w_length)])
-                
-                # Calculate accuracy for the window
-                score = lda.score(X_test_window, test_labels)
-                scores_across_epochs.append(score)
+            X_test_window = csp.transform(test_data[:, :, n-w_length:n])
+            
+            # Calculate accuracy for the window
+            score = lda.score(X_test_window, test_labels)
+            print("Score:", score)
+            scores_across_epochs.append(score)
 
-                # Calculate kappa for the window
-                kappa = cohen_kappa_score(lda.predict(X_test_window), test_labels)
-                kappa_across_epochs.append(kappa)
-                
-                #Confusion matrix
-                predictions = lda.predict(X_test_window)
-                cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
-                number_cm +=1
-            if current_person == 1:
-                scores_across_subjects  = np.array(scores_across_epochs)
-                kappa_across_subjects = np.array(kappa_across_epochs)
-            else:
-                scores_across_subjects = np.vstack((scores_across_subjects,np.array(scores_across_epochs)))
-                kappa_across_subjects = np.vstack((kappa_across_subjects,np.array(kappa_across_epochs)))
-        else: #is never ran
-            for n in w_start:
-                X_test_window = csp.transform(test_data[:, :, n:(n + w_length)])
-                
-                # Calculate accuracy for the window
-                score = lda.score(X_test_window, test_labels)
-                scores_across_epochs.append(score)
+            # Calculate kappa for the window
+            kappa = cohen_kappa_score(lda.predict(X_test_window), test_labels)
+            kappa_across_epochs.append(kappa)
+            
+            #Confusion matrix
+            predictions = lda.predict(X_test_window)
+            cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
+            number_cm +=1
+            _, _, _, _, _, _, itr = calculate_best_itr_dyn(best_itr = 0, accuracy = score, prediction_time = n, best_subjects_accuracies_dyn= None, best_subjects_prediction_times_dyn= None, best_subjects_kappa_dyn= None, best_subjects_itrs_dyn= None, best_cm_dyn= None, subjects_accuracies_dyn= None, subjects_prediction_times_dyn= None, subjects_kappa_dyn= None, subjects_itrs_dyn = None, cm_dyn = None)
+            itrs_across_epochs.append(itr)
 
-                # Calculate kappa for the window
-                kappa = cohen_kappa_score(lda.predict(X_test_window), test_labels)
-                kappa_across_epochs.append(kappa)
-                
-                #Confusion matrix
-                predictions = lda.predict(X_test_window)
-                cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
-                number_cm +=1
-            if current_person == 1:
-                scores_across_subjects  = np.array(scores_across_epochs)
-                kappa_across_subjects = np.array(kappa_across_epochs)
-            else:
-                scores_across_subjects = np.vstack((scores_across_subjects,np.array(scores_across_epochs)))
-                kappa_across_subjects = np.vstack((kappa_across_subjects,np.array(kappa_across_epochs)))
+        if current_person == 1:
+            scores_across_subjects  = np.array(scores_across_epochs)
+            kappa_across_subjects = np.array(kappa_across_epochs)
+            itrs_across_subjects = np.array(itrs_across_epochs)
+        else:
+            scores_across_subjects = np.vstack((scores_across_subjects,np.array(scores_across_epochs)))
+            kappa_across_subjects = np.vstack((kappa_across_subjects,np.array(kappa_across_epochs)))
+            itrs_across_subjects = np.vstack((itrs_across_subjects,np.array(itrs_across_epochs)))
         #mean accuracy and kappa for each subject
         subjects_accuracies.append(np.mean(scores_across_epochs))
         subjects_kappa.append(np.mean(kappa_across_epochs))
+        subjects_itrs.append(np.mean(itrs_across_epochs))
 
     #mean score for each window for each subject
     mean_score_across_subjects = np.mean(scores_across_subjects, axis=0)
     mean_kappa_across_subjects = np.mean(kappa_across_subjects, axis=0)
-    # list of mean accuracy for each window
+    mean_itr_across_subjects = np.mean(itrs_across_subjects, axis = 0)
+    # list of mean accuracy, kappa, itr  for each window
     accuracy = mean_score_across_subjects
     kappa = mean_kappa_across_subjects
+    itr = mean_itr_across_subjects
+    
     # confusion matrix 
     cm = np.divide(cm, number_cm)
-    return subjects_accuracies, scores_across_subjects, subjects_kappa, kappa_across_subjects, accuracy, kappa, cm, csp
+    return subjects_accuracies, scores_across_subjects, subjects_kappa, kappa_across_subjects, subjects_itrs, itrs_across_subjects, accuracy, kappa, itr, cm, csp
 
 '''Create parameter search space
     - Sample n_iter sets of parameters - set to 60 iterations. 
@@ -414,13 +393,14 @@ def create_parameterslist(sfreq):
     w_step_values = np.round(np.array(w_step_values) * sfreq).astype(int)
     
     parameters = {  
-        'csp_components': [4, 8], 
+        # 1, 2 filters for each class, as we have 4 classes.
+        'csp_components': [4, 8], # more than 8 was reading into noise - occipital lobe pattern
         'w_length': w_length_values, 
         'w_step': w_step_values
     }
 
 
-    parameters_list = list(ParameterSampler(parameters, n_iter=60, random_state=rng))
+    parameters_list = list(ParameterSampler(parameters, n_iter=15, random_state=rng))
     return parameters_list
 
 #Random search and return the best parameter values and its accuracy
@@ -473,29 +453,42 @@ def epochs_info(labels=False, tmin=False, tmax = False, length=False):
     else:
         raise ValueError("At least one of 'labels', 'tmin', 'tmax' or 'length' must be True.")
 #calculate the information transfer rate
+#current Source but actually details the problems with the method: Yuan et.al.  https://iopscience-iop-org.proxy-ub.rug.nl/article/10.1088/1741-2560/10/2/026014/pdf
+# B = log2 N + P log2 P + (1 − P)log2[(1 − P)/(N − 1)]
+# Q =  (60/T)
+# Bt = ITR  = B * Q (bits/min)
+# 
 def calculate_best_itr_dyn_tune(best_itr, best_itr_patience, best_itr_threshold, best_confidence_type, accuracy, prediction_time, patience, threshold, confidence_type):
     number_classes = 4 # we have 4 classes in this dataset
     current_B = log2(number_classes) + accuracy*log2(accuracy)+(1-accuracy)*log2((1-accuracy)/(number_classes-1))
-    current_Q = prediction_time
-    current_itr = current_B/current_Q
+
+    prediction_time = prediction_time/250 #turning prediction time to seconds first
+    current_Q =  60/prediction_time 
+
+    current_itr = current_B * current_Q
     if current_itr > best_itr:
         best_itr_patience = patience
         best_itr_threshold = threshold
         best_itr = current_itr
         best_confidence_type = confidence_type
     return best_itr, best_itr_patience, best_itr_threshold, best_confidence_type
-def calculate_best_itr_dyn(best_itr, accuracy, prediction_time, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, cm_dyn):
+
+def calculate_best_itr_dyn(best_itr, accuracy, prediction_time, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_subjects_itrs_dyn, best_cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, subjects_itrs_dyn, cm_dyn):
     number_classes = 4 # we have 4 classes in this dataset
     current_B = log2(number_classes) + accuracy*log2(accuracy)+(1-accuracy)*log2((1-accuracy)/(number_classes-1))
-    current_Q = prediction_time
-    current_itr = current_B/current_Q
+
+    prediction_time = prediction_time/250 #turning prediction time to seconds first
+    current_Q =  60/prediction_time 
+
+    current_itr = current_B * current_Q
     if current_itr > best_itr:
         best_subjects_accuracies_dyn = subjects_accuracies_dyn
         best_subjects_kappa_dyn  = subjects_kappa_dyn 
         best_subjects_prediction_times_dyn = subjects_prediction_times_dyn
         best_cm_dyn = cm_dyn
         best_itr = current_itr
-    return best_itr, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_cm_dyn
+        best_subjects_itrs_dyn = subjects_itrs_dyn
+    return best_itr, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_subjects_itrs_dyn, best_cm_dyn, current_itr
 
 def plot_confusion_matrix(cm_stat, cm_dyn):
     plt.figure()
@@ -520,70 +513,55 @@ def plot_confusion_matrix(cm_stat, cm_dyn):
 
 #Sliding - LDA
 def main_lda_sliding():
-    subjects = [1,2,3,4,5,6,7,8,9]  # 9 subjects
+    subjects = [1,3]  # 9 subjects
     sfreq = 250    # Sampling frequency - 250Hz
     '''
     Hyperparameter tuning
     '''
-    #Hyperparameter_tuning for csp, and sliding window parameters using the static model
+    #Hyperparameter_tuning for csp, and expanding window parameters using the static model, as we have limited compute
     print("\n\n Hyperparameter tuning (1): csp and window parameters \n\n")
-    parameters_list = create_parameterslist(sfreq)
-    best_params_sliding, best_accuracy = hyperparameter_tuning(parameters_list, subjects) #tuned on accuracy as we dont have pred time for itr
+    #parameters_list = create_parameterslist(sfreq)
+    #best_params_sliding, _ = hyperparameter_tuning(parameters_list, subjects) #tuned on accuracy as we dont have pred time for itr
     print("\n\n Hyperparameter tuning (1): completed \n\n")
-    csp_components = best_params_sliding['csp_components']
-    w_length = best_params_sliding['w_length']
-    w_step =  best_params_sliding['w_step']
+    csp_components =  8 #best_params_sliding['csp_components']
+    w_length =  175#best_params_sliding['w_length']
+    w_step =  75#best_params_sliding['w_step']
 
     w_start= np.arange(0, epochs_info(length= True) -  w_length,  w_step)  # epochs_info(length= True) = 1001
 
-    confidence_types = ['highest_prob','difference_two_highest']#, 'neg_norm_shannon' ]
-    patience_values = np.arange(1, len(w_start)/3) #need to control this by itr 
-    threshold_values = np.array(np.arange(0.1, 1, 0.1)) #Have thresholds that are super close to 0 and super close 1, that might expand the plot
-    threshold_values =np.concatenate(([0.01], threshold_values))
-    threshold_values = np.append(threshold_values, 0.99)
-    print("Threshold values: ",threshold_values)
+    confidence_types = ['highest_prob','difference_two_highest', 'neg_norm_shannon']
+    #Patience values -> 1 - len(nr of windows)
+    patience_values = np.arange(1, len(w_start), 4) #need to control this by itr 
+    # Threshold values -> [0.001, 0.01, 0.1 - 0.9, 0.99, 0.999]
+    #threshold_values = np.array(np.arange(0.1, 1, 0.1)) #Have thresholds that are super close to 0 and super close 1, that might expand the plot
+    #threshold_values =np.concatenate(([0.001, 0.01], threshold_values))
+    #threshold_values = np.append(threshold_values, [0.99, 0.999])
+    threshold_values = [0.1, 0.9]
     #Find optimal confidence type and patience from the sliding dynamic model using itr
     print("\n\n Hyperparameter tuning (2): patience and confidence type \n\n")
+
+    print(f"Chosen_hyperparameter_values: \n - csp: {csp_components},\n - window length: {w_length}, \n -w_step: {w_step}, \n -len patience: {len(patience_values)}")
     # over confidence values
-    accuracy_by_confidence_type = {}
-    average_accuracy_by_confidence_type = {}
-    for j, confidence_type in enumerate(confidence_types):
-        accuracy_array = []
-        prediction_time_array = []
-        kappa_array = []
-        best_itr = 0
+
+    #We tune with respect to ITR, as we not only want to focus on accuracy but also prediction time.
+    '''for j, confidence_type in enumerate(confidence_types):
+        best_itr_tune = 0
         best_itr_threshold = 0
         best_itr_patience = 0
-        best_confidence_type = 'none'
+        best_confidence_type = None
         # over threshold values
         for n, threshold in enumerate(threshold_values):
-            accuracy_row = []
-            prediction_time_row = []
-            kappa_array_row = []
             # over patience values
             for m, patience in enumerate(patience_values):
                 print("\n")
                 print(f" Confidence type: {j+1}/{len(confidence_types)}, Threshold:{n+1}/{len(threshold_values)},  Patience: {m+1}/{len(patience_values)}")
                 print("\n")
                 #given the varaibles, provide the average accuracy and prediction times (early prediction)
-                accuracy, kappa, prediction_time, _, _, _ , _, _, _, _ = run_sliding_classification_dynamic(subjects, threshold, patience, confidence_type, w_length, w_step, sfreq, csp_components)
-                best_itr, best_itr_patience, best_itr_threshold, best_confidence_type = calculate_best_itr_dyn_tune(best_itr, best_itr_patience, best_itr_threshold, best_confidence_type, accuracy, prediction_time, patience, threshold, confidence_type)
-                accuracy_row.append(accuracy)
-                prediction_time_row.append(prediction_time)
-                kappa_array_row.append(kappa)
-            accuracy_array.append(accuracy_row)
-            prediction_time_array.append(prediction_time_row)
-            kappa_array.append(kappa_array_row)
-        #Plotting the average accuracy and prediction times (early prediction) as well as the different threshold and patience values across subjects for each of the confidence types
-        accuracy_array = np.array(accuracy_array) #A 2D array
-        prediction_time_array = np.array(prediction_time_array)
-        kappa_array = np.array(kappa_array)
-        #Plotting accuracy for each confidence type (threshold, patience)
-        accuracy_by_confidence_type[confidence_type] = accuracy_array
-        average_accuracy_by_confidence_type[confidence_type] = np.mean(accuracy_array, axis = 0)
-
-    #best_itr_patience = 2
-    #best_confidence_type = 'difference_two_highest'
+                accuracy, kappa, prediction_time, _, _, _, _, _ , _, _, _, _, _ = run_sliding_classification_dynamic(subjects, threshold, patience, confidence_type, w_length, w_step, sfreq, csp_components)
+                best_itr_tune, best_itr_patience, best_itr_threshold, best_confidence_type = calculate_best_itr_dyn_tune(best_itr_tune, best_itr_patience, best_itr_threshold, best_confidence_type, accuracy, prediction_time, patience, threshold, confidence_type)
+    '''
+    best_itr_patience = 4
+    best_confidence_type = 'neg_norm_shannon'
     print("\n\n Hyperparameter tuning (2): completed\n\n")
     print(f"chosen patience: {best_itr_patience}, chosen confidence_type: {best_confidence_type}")
 
@@ -597,24 +575,29 @@ def main_lda_sliding():
     kappa_dynamic_total =  []
     prediction_time_dynamic = []
     prediction_time_dynamic_total = []
+    itr_dynamic = []
+    itr_dynamic_total = []
     best_subjects_accuracies_dyn = None
     best_subjects_prediction_times_dyn = None
     best_subjects_kappa_dyn = None
     best_cm_dyn = None
+    best_subjects_itrs_dyn = None
     best_itr = 0
     #take the average subjects accuracies
     print("\n\n Evaluation (1): Finding dynamic model accuracy, kappa, and pred time, across thresholds \n\n")
     for n, threshold in enumerate(threshold_values):
         print(f"Threshold:{n+1}/{len(threshold_values)}")
         #dynamic model evaluation
-        accuracy, kappa, prediction_time, cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, mean_scores_across_subject, mean_kappa_across_subjects,mean_prediction_time_across_subjects = run_sliding_classification_dynamic(subjects, threshold, best_itr_patience, best_confidence_type, w_length, w_step, sfreq, csp_components)
-        best_itr, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_cm_dyn = calculate_best_itr_dyn(best_itr, accuracy, prediction_time, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, cm_dyn)
+        accuracy, kappa, prediction_time, itr, cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, subjects_itrs_dyn, mean_scores_across_subjects, mean_kappa_across_subjects,mean_prediction_time_across_subjects, mean_itr_across_subjects = run_sliding_classification_dynamic(subjects, threshold, best_itr_patience, best_confidence_type, w_length, w_step, sfreq, csp_components)
+        best_itr, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_subjects_itrs_dyn, best_cm_dyn, _= calculate_best_itr_dyn(best_itr, accuracy, prediction_time, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_subjects_itrs_dyn, best_cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, subjects_itrs_dyn, cm_dyn)
         accuracy_dynamic.append(accuracy)
         kappa_dynamic.append(kappa)
         prediction_time_dynamic.append(prediction_time)
-        accuracy_dynamic_total.append(mean_scores_across_subject)
+        accuracy_dynamic_total.append(mean_scores_across_subjects)
         kappa_dynamic_total.append(mean_kappa_across_subjects)
         prediction_time_dynamic_total.append(mean_prediction_time_across_subjects)
+        itr_dynamic.append(itr)
+        itr_dynamic_total.append(mean_itr_across_subjects)
     
     print("\n\n Evaluation (2):Finding static model accuracy, and kappa for the given prediction times from the dynamic model \n\n")
     #for each prediction time from the dynamic model, find the accuracy and kappa from the static model
@@ -627,12 +610,13 @@ def main_lda_sliding():
     accuracy = []
     kappa = []
     cm_stat = None
-    
+     
 
-    subjects_accuracies_stat, scores_across_subjects_stat, subjects_kappa_stat, kappa_across_subjects_stat, accuracy, kappa, cm_stat, _ = run_sliding_classification_static(subjects, w_length, w_step, csp_components, prediction_time_dynamic)
+    subjects_accuracies_stat, scores_across_subjects_stat, subjects_kappa_stat, kappa_across_subjects_stat, subjects_itrs_stat, itrs_across_subjects_stat,  accuracy, kappa, itr, cm_stat, csp_stat= run_sliding_classification_static(subjects, w_length, w_step, csp_components, prediction_time_dynamic)
     #accuracy and kappa are not single numbers here
     accuracy_static = accuracy
     kappa_static = kappa
+    itr_static = itr
 
 
     #Turn pred times back to seconds
@@ -643,7 +627,7 @@ def main_lda_sliding():
     best_subjects_prediction_times_dyn = np.array(best_subjects_prediction_times_dyn) / sfreq + tmin
 
     '''
-    Plotting and storing data
+    #Plotting and storing data
     '''
     #Write the optimal parameters
     print(f"Chosen parameters: \n - csp: {csp_components}, \n - w_length: {w_length},\n - w_step:  {w_step}, \n - confidence_type: {best_confidence_type}, \n - patience: {best_itr_patience} out of {patience_values},  \n - thresholds: {threshold_values}")
@@ -666,7 +650,7 @@ def main_lda_sliding():
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
 
     f = open(project_root + "/reports/figures/cumulative/LDA/dynamicVSstatic/sliding_static_model_accuracy_by_subject.txt", "w")
-    f.write(f"Classification accuracy: {np.mean(accuracy)}\n")
+    f.write(f"Classification accuracy: {np.mean(accuracy_static)}\n")
     for subject, subject_accuracy in sorted_subjects:
         f.write(f"Subject {subject}: Accuracy: {subject_accuracy} \n")
         print(f"Subject {subject}: Accuracy: {subject_accuracy}")
@@ -687,10 +671,31 @@ def main_lda_sliding():
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
 
     f = open(project_root + "/reports/figures/cumulative/LDA/dynamicVSstatic/sliding_static_model_kappa_by_subject.txt", "w")
-    f.write(f"Average kappa: {np.mean(kappa)}\n")
+    f.write(f"Average kappa: {np.mean(kappa_static)}\n")
     for subject, subject_kappa in sorted_subjects:
         f.write(f"Subject {subject}: Kappa: {subject_kappa} \n")
         print(f"Subject {subject}: Kappa: {subject_kappa}")
+    f.close()
+
+    #write per subject itr - dynamic
+    subject_tuples = [(i+1, acc) for i, acc in enumerate(best_subjects_itrs_dyn)]
+    sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
+    f = open(project_root + "/reports/figures/cumulative/LDA/dynamicVSstatic/sliding_dynamic_model_itrs_by_subject.txt", "w")
+    f.write(f"Average itr: {np.mean(itr_dynamic)}\n")
+    for subject, subject_itr in sorted_subjects:
+        f.write(f"Subject {subject}: ITR: {subject_itr} \n")
+        print(f"Subject {subject}: ITR: {subject_itr}")
+    f.close()
+
+    #write per subject itr - static
+    subject_tuples = [(i+1, acc) for i, acc in enumerate(subjects_itrs_stat)]
+    sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
+
+    f = open(project_root + "/reports/figures/cumulative/LDA/dynamicVSstatic/sliding_static_model_itrs_by_subject.txt", "w")
+    f.write(f"Average ITR: {np.mean(itr_static)}\n")
+    for subject, subject_itr in sorted_subjects:
+        f.write(f"Subject {subject}: ITR: {subject_itr} \n")
+        print(f"Subject {subject}: ITR: {subject_itr}")
     f.close()
 
     #write per subject prediction time - dynamic
@@ -716,13 +721,13 @@ def main_lda_sliding():
     offset = tmax
     plt.axvline(onset, linestyle="--", color="r", label="Onset")
     plt.axvline(offset, linestyle="--", color="b", label="Offset")
-    plt.errorbar(prediction_time_dynamic, accuracy_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_accuracy_dynamic, label = "Dynamic model", fmt='o', color='blue', ecolor='red', linestyle='-', linewidth=2, capsize=5)
-    plt.errorbar(prediction_time_dynamic, accuracy_static, xerr = sem_pred_time_dynamic, yerr= sem_accuracy_stat, label = "Static model", fmt='s', color='orange', ecolor='red', linestyle='--', linewidth=2, capsize=5)
-    plt.title("Sliding model: Accuracy vs Pred time")
+    plt.errorbar(prediction_time_dynamic, accuracy_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_accuracy_dynamic, label = "Dynamic model", fmt='o', color='blue', ecolor='red', linestyle='-', linewidth=2, capsize=3)
+    plt.errorbar(prediction_time_dynamic, accuracy_static, xerr = sem_pred_time_dynamic, yerr= sem_accuracy_stat, label = "Static model", fmt='s', color='green', ecolor='yellow', linestyle='-', linewidth=2, capsize=3)
+    plt.title("Sliding LDA models: Accuracy vs Pred time")
     plt.axhline(0.25, label= "chance")
     plt.legend()
-    plt.show()
     plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamicVSstatic/SlidingAccuracy.png')
+    plt.show()
 
     #plot kappa
     sem_kappa_dynamic = [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(kappa_dynamic_total)]
@@ -736,28 +741,56 @@ def main_lda_sliding():
     offset = tmax
     plt.axvline(onset, linestyle="--", color="r", label="Onset")
     plt.axvline(offset, linestyle="--", color="b", label="Offset")
-    plt.errorbar(prediction_time_dynamic, kappa_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_kappa_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='red', linestyle='-', linewidth=2, capsize=5)
-    plt.errorbar(prediction_time_dynamic, kappa_static, xerr = sem_pred_time_dynamic, yerr= sem_kappa_stat, label = "Static model", fmt='s', color='orange', ecolor='red', linestyle='--', linewidth=2, capsize=5)
-    plt.title("Sliding model: Kappa vs Pred time")
+    plt.errorbar(prediction_time_dynamic, kappa_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_kappa_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='green', linestyle='-', linewidth=2, capsize=3)
+    plt.errorbar(prediction_time_dynamic, kappa_static, xerr = sem_pred_time_dynamic, yerr= sem_kappa_stat, label = "Static model", fmt='s', color='orange', ecolor='red', linestyle='--', linewidth=2, capsize=3)
+    plt.title("Sliding LDA models: Kappa vs Pred time")
     plt.legend()
-    plt.show()
     plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamicVSstatic/SlidingKappa.png')
+    plt.show()
+
+    #plot itrs
+    sem_itr_dynamic = [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(itr_dynamic_total)]
+    sem_itr_stat =  [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(itrs_across_subjects_stat).T]
+    plt.figure()
+    plt.xlabel('Prediction time')
+    plt.ylabel('Information transfer rate (bits/min)')
+    plt.grid(True)
+    tmin, tmax = epochs_info(tmin = True, tmax = True)
+    onset = tmin
+    offset = tmax
+    plt.axvline(onset, linestyle="--", color="r", label="Onset")
+    plt.axvline(offset, linestyle="--", color="b", label="Offset")
+    plt.errorbar(prediction_time_dynamic, itr_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_itr_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='green', linestyle='-', linewidth=2, capsize=3)
+    plt.errorbar(prediction_time_dynamic, itr_static, xerr = sem_pred_time_dynamic, yerr= sem_itr_stat, label = "Static model", fmt='s', color='orange', ecolor='red', linestyle='--', linewidth=2, capsize=3)
+    plt.title("Sliding LDA models: Information Transfer rate vs Pred time")
+    plt.legend()
+    plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamicVSstatic/SlidingItr.png')
+    plt.show()
 
     plot_confusion_matrix(cm_stat, best_cm_dyn)
     #for comparison with the sliding model to decide and choose the one that performs better
-    return best_itr
+    itr_dyn = best_itr
+    itr_stat = np.mean(itr_static)
+    return itr_dyn, itr_stat
 '''
 to do:
 #add error bars to the accuracy and kappa plots, (title and no title)
-add accuracy of patience vs threshold plot(only for dynamic model) - it seems impossible ngl
-add accuracy - dyn vs static for each subject - interesting
-- need to get multiple measurements from the models for each time point, to calculate the Standard erro of the mean
-fix confusion matrix plot - make the numbers numbers make sense, label
-add itr plot
-see if patience is controlled
+   / #add accuracy of patience vs threshold plot(only for dynamic model) - it seems impossible ngl
+   / #add accuracy - dyn vs static for each subject - interesting
+#need to get multiple measurements from the models for each time point, to calculate the Standard erro of the mean
+#fix confusion matrix plot - make the numbers numbers make sense, label
+add itr plot and, see if patience is controlled - see if current way of itr is good
 #Have thresholds that are super close to 0 and super close 1, that might expand the plot
+Note what you changed here and modify elsewhere: 
+    - sampels vs seconds, 
+    - total for error bars, 
+    - if predict -> predict_time = n, 
+    - confusion matrix - not averaged
+    - save before show - plots
+    - if predict_time.any()
+    - if predict_time.any() -> (n-w_length:n) - outputing at the end of the window, but does that make sense
 
-introduce way of finding best between sliding vs expanding - make another file for sliding, and output best_itr and use the file that has the best itr
+#introduce way of finding best between sliding vs expanding - make another file for sliding, and output best_itr and use the file that has the best itr
 run full models
 '''
 
