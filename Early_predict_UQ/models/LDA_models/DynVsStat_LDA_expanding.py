@@ -9,8 +9,11 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from scipy.stats import entropy
 from sklearn.model_selection import KFold
 from sklearn.metrics import cohen_kappa_score, confusion_matrix, ConfusionMatrixDisplay
+import mne
+import logging
+# Set the logging level to ERROR to reduce verbosity
+mne.set_log_level(logging.ERROR)
 from mne.decoding import CSP
-
 from sklearn.model_selection import ParameterSampler
 import numpy as np
 
@@ -226,7 +229,7 @@ def run_expanding_classification_tuning_static(subjects, initial_window_length, 
         train_labels = labels[train_indexes]
 
 
-        cv = KFold(n_splits=5, shuffle = True, random_state=42)
+        cv = KFold(n_splits=10, shuffle = True, random_state=42)
 
         scores_cv_splits = []
         kappa_cv_splits  = []
@@ -323,7 +326,6 @@ def run_expanding_classification_static(subjects, initial_window_length, expansi
         pred_times = np.round(np.array(pred_times)).astype(int)
         for n, window_start in enumerate(pred_times):
             window_length = pred_times[n]
-            window_length = np.round(250 * pred_times[n]).astype(int)
             X_test_window = csp.transform(test_data[:, :, w_start[0]: window_length])
             
             # Calculate accuracy for the window
@@ -391,7 +393,7 @@ def create_parameterslist(sfreq):
     }
 
     #Random search parameters - n_tier sets of parameter values
-    parameters_list = list(ParameterSampler(parameters, n_iter= 5, random_state=rng))
+    parameters_list = list(ParameterSampler(parameters, n_iter= 60, random_state=rng))
     return parameters_list
 
 #Random search and return the best parameter values and its accuracy
@@ -444,6 +446,7 @@ def epochs_info(labels=False, tmin=False, tmax = False, length=False):
         return epochs_data.shape[2]
     else:
         raise ValueError("At least one of 'labels', 'tmin', 'tmax' or 'length' must be True.")
+    
 #calculate the information transfer rate
 #current Source but actually details the problems with the method: Yuan et.al.  https://iopscience-iop-org.proxy-ub.rug.nl/article/10.1088/1741-2560/10/2/026014/pdf
 # B = log2 N + P log2 P + (1 − P)log2[(1 − P)/(N − 1)]
@@ -483,6 +486,8 @@ def calculate_best_itr_dyn(best_itr, accuracy, prediction_time, best_subjects_ac
 def plot_confusion_matrix(cm_stat, cm_dyn):
     plt.figure()
     plt.title(f"Confusion Matrix : LDA - Dynamic - Expanding model", fontsize=12)
+    plt.xlabel('Predicted Label')
+    plt.ylabel('True Label')
     #confusion matrix
     displaycm = ConfusionMatrixDisplay(cm_dyn, display_labels=['left_hand', 'right_hand', 'tongue', 'feet'])
     plt.grid(False)
@@ -493,6 +498,8 @@ def plot_confusion_matrix(cm_stat, cm_dyn):
 
     plt.figure()
     plt.title(f"Confusion Matrix : LDA - Static - Expanding model", fontsize=12)
+    plt.xlabel('Predicted Label')
+    plt.ylabel('True Label')
     #confusion matrix
     displaycm = ConfusionMatrixDisplay(cm_stat, display_labels=['left_hand', 'right_hand', 'tongue', 'feet'])
     plt.grid(False)
@@ -503,32 +510,30 @@ def plot_confusion_matrix(cm_stat, cm_dyn):
 
 #Expanding model - LDA
 def main_lda_expanding():
-    subjects = [1,3]  # 9 subjects
+    subjects = [1,2,3,4,5,6,7,8,9]  # 9 subjects
     sfreq = 250    # Sampling frequency - 250Hz
     '''
     Hyperparameter tuning
     '''
     #Hyperparameter_tuning for csp, and expanding window parameters using the static model, as we have limited compute
     print("\n\n Hyperparameter tuning (1): csp and window parameters \n\n")
-    #parameters_list = create_parameterslist(sfreq)
-    #best_params_expanding, _ = hyperparameter_tuning(parameters_list, subjects) #tuned on accuracy as we dont have pred time for itr
+    parameters_list = create_parameterslist(sfreq)
+    best_params_expanding, _ = hyperparameter_tuning(parameters_list, subjects) #tuned on accuracy as we dont have pred time for itr
     print("\n\n Hyperparameter tuning (1): completed \n\n")
     
-    csp_components = 8 #best_params_expanding['csp_components']
-    initial_window_length = 175 #best_params_expanding['initial_window_length']
-    expansion_rate = 75 #best_params_expanding['expansion_rate']
+    csp_components = best_params_expanding['csp_components']
+    initial_window_length = best_params_expanding['initial_window_length']
+    expansion_rate = best_params_expanding['expansion_rate']
 
     w_start= np.arange(0, epochs_info(length= True) - initial_window_length, expansion_rate) 
-    print("Length: 4 or number total samples-1000 something? ", epochs_info(length= True))
-
     confidence_types = ['highest_prob','difference_two_highest', 'neg_norm_shannon' ]
     # Patience values = 1 - len(nr of windows)
-    patience_values = np.arange(1, len(w_start), 4) #need to control this by itr 
+    patience_values = np.arange(1, len(w_start)) #need to control this by itr 
     # Threshold values -> [0.001, 0.01, 0.1 - 0.9, 0.99, 0.999]
-    #threshold_values = np.array(np.arange(0.1, 1, 0.1)) #Have thresholds that are super close to 0 and super close 1, that might expand the plot
-    #threshold_values =np.concatenate(([0.001, 0.01], threshold_values))
-    #threshold_values = np.append(threshold_values, [0.99, 0.999])
-    threshold_values = [0.1, 0.5, 0.9]
+    threshold_values = np.array(np.arange(0.1, 1, 0.1)) #Have thresholds that are super close to 0 and super close 1, that might expand the plot
+    threshold_values =np.concatenate(([0.001, 0.01], threshold_values))
+    threshold_values = np.append(threshold_values, [0.99, 0.999])
+    #threshold_values = [0.1, 0.5, 0.9]
     #Find optimal confidence type and patience from the expanding dynamic model using itr
     print("\n\n Hyperparameter tuning (2): patience and confidence type \n\n")
 
@@ -760,14 +765,7 @@ def main_lda_expanding():
     itr_dyn = best_itr
     itr_stat = np.mean(itr_static)
     return itr_dyn, itr_stat
-'''
-to do:
-plot the accuracy and kappa plots 
-print the chosen traversal methods, csp, window parameters, confidence type, patience, 
-introduce way of finding best between sliding vs expanding - make another file for sliding, and output best_itr and use the file that has the best itr
-table (dynamic vs static) with pr subject accuracy and kappa(and maybe pred time, but only dynamic has that)
-confusion matrix
-'''
+
 
 if __name__ == "__main__":
     main_lda_expanding()
