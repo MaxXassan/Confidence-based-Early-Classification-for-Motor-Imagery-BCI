@@ -130,6 +130,7 @@ def run_expanding_classification_dynamic(subjects, threshold, patience, confiden
         kappa_across_epochs = []
         predict_time_across_epochs = []
         itrs_across_epochs = []
+        predictions = []
         for epoch_idx in range(len(test_indexes)):
             previous_class_index = None
             predict = False
@@ -149,59 +150,54 @@ def run_expanding_classification_dynamic(subjects, threshold, patience, confiden
                     score = svm.score(X_test_epoch_window.reshape(1, -1), [test_labels[epoch_idx]])
                     scores_across_epochs.append(score)
 
-                    # Calculate kappa for the window
-                    kappa = cohen_kappa_score(svm.predict(X_test_window), test_labels)
-                    kappa_across_epochs.append(kappa)
-
-                    #prediction time
                     predict_time = window_length
                     #predict_time = (predict_time + window_length) / sfreq + epochs.tmin
                     predict_time_across_epochs.append(predict_time)
 
-                    #Confusion matrix
-                    predictions = svm.predict(X_test_window)
-                    cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
-                    number_cm +=1
+                    #For kappa, and confusion matrix
+                    prediction = svm.predict(X_test_epoch_window.reshape(1, -1))
+                    predictions.append(prediction)
                     break
             else:
                     #score
                     score = svm.score(X_test_epoch_window.reshape(1, -1), [test_labels[epoch_idx]])
                     scores_across_epochs.append(score)
 
-                    # Calculate kappa for the window
-                    kappa = cohen_kappa_score(svm.predict(X_test_window), test_labels)
-                    kappa_across_epochs.append(kappa)
-
                     #prediction time
                     #predict_time = n
                     predict_time = window_length
                     predict_time_across_epochs.append(predict_time)
-                    
-                    #Confusion matrix
-                    predictions = svm.predict(X_test_window)
-                    cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
-                    number_cm +=1
+
+                    #For kappa, and confusion matrix
+                    prediction = svm.predict(X_test_epoch_window.reshape(1, -1))
+                    predictions.append(prediction)
+
+        #Information transfer rate      
         _, _, _, _, _, _, itr = calculate_best_itr_dyn(best_itr = 0, accuracy = np.mean(scores_across_epochs), prediction_time = np.mean(predict_time_across_epochs), best_subjects_accuracies_dyn= None, best_subjects_prediction_times_dyn= None, best_subjects_kappa_dyn= None, best_subjects_itrs_dyn= None, best_cm_dyn= None, subjects_accuracies_dyn= None, subjects_prediction_times_dyn= None, subjects_kappa_dyn= None, subjects_itrs_dyn = None, cm_dyn = None)
         itrs_across_epochs = itr #single number
         itrs_across_subjects.append(itr)
-
+        #Kappa
+        kappa_score = cohen_kappa_score(predictions, test_labels)
+        kappa_across_epochs =  kappa_score #single number
+        kappa_across_subjects.append(kappa_score)
+        #Confusion matrix
+        cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
+        number_cm +=1
         if current_person == 1:
             scores_across_subjects  = scores_across_epochs
             prediction_time_across_subjects = predict_time_across_epochs
-            kappa_across_subjects = kappa_across_epochs
         else:
             scores_across_subjects = np.vstack((scores_across_subjects, scores_across_epochs))
             prediction_time_across_subjects = np.vstack((prediction_time_across_subjects, predict_time_across_epochs))
-            kappa_across_subjects = np.vstack((kappa_across_subjects, kappa_across_epochs))
         subjects_accuracies.append(np.mean(scores_across_epochs))
         subjects_prediction_times.append(np.mean(predict_time_across_epochs))
-        subjects_kappa.append(np.mean(kappa_across_epochs))
+        subjects_kappa = np.append(subjects_kappa,kappa_across_epochs)    
         subjects_itrs = np.append(subjects_itrs, itrs_across_epochs)
     #accuracy
     mean_scores_across_subjects = np.mean(scores_across_subjects, axis=0)
     accuracy = np.mean(mean_scores_across_subjects) #single number
     #kappa
-    mean_kappa_across_subjects = np.mean(kappa_across_subjects, axis=0)
+    mean_kappa_across_subjects = np.array(kappa_across_subjects)
     kappa = np.mean(mean_kappa_across_subjects)# single number
     #prediction time
     mean_prediction_time_across_subjects = np.mean(prediction_time_across_subjects, axis=0)
@@ -336,26 +332,25 @@ def run_expanding_classification_static(subjects, initial_window_length, expansi
         itrs_across_epochs = []
         w_start = np.arange(0, test_data.shape[2] - initial_window_length, expansion_rate)
         pred_times = np.round(np.array(pred_times)).astype(int)
-        if pred_times:
-            for n, window_start in enumerate(pred_times):
-                window_length = pred_times[n]
-                X_test_window = csp.transform(test_data[:, :, w_start[0]: window_length])
-                
-                # Calculate accuracy for the window
-                score = svm.score(X_test_window, test_labels)
-                scores_across_epochs.append(score)
+        for n, window_start in enumerate(pred_times):
+            window_length = pred_times[n]
+            X_test_window = csp.transform(test_data[:, :, w_start[0]: window_length])
+            
+            # Calculate accuracy for the window
+            score = svm.score(X_test_window, test_labels)
+            scores_across_epochs.append(score)
 
-                # Calculate kappa for the window
-                kappa = cohen_kappa_score(svm.predict(X_test_window), test_labels)
-                kappa_across_epochs.append(kappa)
-                
-                #Confusion matrix
-                predictions = svm.predict(X_test_window)
-                cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
-                number_cm +=1
-                #ITR across epochs
-                _, _, _, _, _, _, itr = calculate_best_itr_dyn(best_itr = 0, accuracy = np.mean(scores_across_epochs), prediction_time = np.mean(pred_times), best_subjects_accuracies_dyn= None, best_subjects_prediction_times_dyn= None, best_subjects_kappa_dyn= None, best_subjects_itrs_dyn= None, best_cm_dyn= None, subjects_accuracies_dyn= None, subjects_prediction_times_dyn= None, subjects_kappa_dyn= None, subjects_itrs_dyn = None, cm_dyn = None)
-                itrs_across_epochs.append(itr)
+            # Calculate kappa for the window
+            kappa = cohen_kappa_score(svm.predict(X_test_window), test_labels)
+            kappa_across_epochs.append(kappa)
+            
+            #Confusion matrix
+            predictions = svm.predict(X_test_window)
+            cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
+            number_cm +=1
+            #ITR across epochs
+            _, _, _, _, _, _, itr = calculate_best_itr_dyn(best_itr = 0, accuracy = np.mean(scores_across_epochs), prediction_time = np.mean(pred_times), best_subjects_accuracies_dyn= None, best_subjects_prediction_times_dyn= None, best_subjects_kappa_dyn= None, best_subjects_itrs_dyn= None, best_cm_dyn= None, subjects_accuracies_dyn= None, subjects_prediction_times_dyn= None, subjects_kappa_dyn= None, subjects_itrs_dyn = None, cm_dyn = None)
+            itrs_across_epochs.append(itr)
 
             if current_person == 1:
                 scores_across_subjects  = np.array(scores_across_epochs)
@@ -535,24 +530,24 @@ def plot_confusion_matrix(cm_stat, cm_dyn):
 
 #Expanding model - SVM
 def main_svm_expanding():
-    subjects = [1,2,3,4,5,6,7,8,9]  # 9 subjects
+    subjects = [1,9]  # 9 subjects
     sfreq = 250    # Sampling frequency - 250Hz
     '''
     Hyperparameter tuning
     '''
     #Hyperparameter_tuning for csp, and expanding window parameters using the static model
     print("\n\n Hyperparameter tuning (1): csp and window parameters \n\n")
-    parameters_list = create_parameterslist(sfreq)
-    best_params_expanding, best_accuracy = hyperparameter_tuning(parameters_list, subjects) #tuned on accuracy as we dont have pred time for itr
+   #parameters_list = create_parameterslist(sfreq)
+    #best_params_expanding, best_accuracy = hyperparameter_tuning(parameters_list, subjects) #tuned on accuracy as we dont have pred time for itr
     print("\n\n Hyperparameter tuning (1): completed \n\n")
     
-    csp_components = best_params_expanding['csp_components']
-    initial_window_length = best_params_expanding['initial_window_length']
-    expansion_rate = best_params_expanding['expansion_rate']
-    c = best_params_expanding['C']
-    kernel = best_params_expanding['kernel']
+    csp_components = 8 #best_params_expanding['csp_components']
+    initial_window_length = 250 #best_params_expanding['initial_window_length']
+    expansion_rate = 75 #best_params_expanding['expansion_rate']
+    c = 1000 #best_params_expanding['C']
+    kernel = 'rbf' #best_params_expanding['kernel']
     if kernel == 'rbf':
-        gamma = best_params_expanding['gamma']
+        gamma = 0.01 #best_params_expanding['gamma']
     else:
         gamma = None
 
@@ -560,7 +555,7 @@ def main_svm_expanding():
     confidence_types = ['highest_prob','difference_two_highest', 'neg_norm_shannon' ]
     patience_values = np.arange(1, len(w_start)) #need to control this by itr 
     # Threshold values -> [0.001, 0.01, 0.1 - 0.9, 0.99, 0.999]
-    threshold_values = np.array(np.arange(0.1, 1, 0.1)) #Have thresholds that are super close to 0 and super close 1, that might expand the plot
+    threshold_values = np.array(np.arange(0.1, 1, 0.3)) #Have thresholds that are super close to 0 and super close 1, that might expand the plot
     threshold_values =np.concatenate(([0.001, 0.01], threshold_values))
     threshold_values = np.append(threshold_values, [0.99, 0.999])
     #threshold_values = [0.1, 0.5, 0.9]
@@ -568,7 +563,7 @@ def main_svm_expanding():
     #Find optimal confidence type and patience from the sliding dynamic model using itr
     print("\n\n Hyperparameter tuning (2): patience and confidence type \n\n")
     # over confidence values
-    for j, confidence_type in enumerate(confidence_types):
+    '''for j, confidence_type in enumerate(confidence_types):
         best_itr_tune = 0
         best_itr_threshold = 0
         best_itr_patience = 0
@@ -581,11 +576,11 @@ def main_svm_expanding():
                 print(f" Confidence type: {j+1}/{len(confidence_types)}, Threshold:{n+1}/{len(threshold_values)},  Patience: {m+1}/{len(patience_values)}")
                 print("\n")
                 #given the varaibles, provide the average accuracy and prediction times (early prediction)
-                accuracy, kappa, prediction_time, _, _, _, _, _ , _, _, _, _, _  = run_expanding_classification_dynamic(subjects, threshold, patience, confidence_type, initial_window_length, expansion_rate, sfreq, csp_components, c , kernel, gamma = None)
+                accuracy, kappa, prediction_time, _, _, _, _, _ , _, _, _, _, _  = run_expanding_classification_dynamic(subjects, threshold, patience, confidence_type, initial_window_length, expansion_rate, sfreq, csp_components, c , kernel, gamma)
                 best_itr_tune, best_itr_patience, best_itr_threshold, best_confidence_type = calculate_best_itr_dyn_tune(best_itr_tune, best_itr_patience, best_itr_threshold, best_confidence_type, accuracy, prediction_time, patience, threshold, confidence_type)
-
-    #best_itr_patience = 3
-    #best_confidence_type = 'highest_prob'
+    ''' 
+    best_itr_patience = 3
+    best_confidence_type = 'neg_norm_shannon'
     print("\n\n Hyperparameter tuning (2): completed\n\n")
     print(f"chosen patience: {best_itr_patience}, chosen confidence_type: {best_confidence_type}")
 
@@ -613,9 +608,9 @@ def main_svm_expanding():
     for n, threshold in enumerate(threshold_values):
         print(f"Threshold:{n+1}/{len(threshold_values)}")
         #dynamic model evaluation
-        accuracy, kappa, prediction_time, itr, cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, subjects_itrs_dyn, mean_scores_across_subjects, mean_kappa_across_subjects,mean_prediction_time_across_subjects, mean_itr_across_subjects  = run_expanding_classification_dynamic(subjects, threshold, best_itr_patience, best_confidence_type, initial_window_length, expansion_rate, sfreq, csp_components, c , kernel, gamma = None)
-        best_itr, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_subjects_itrs_dyn, best_cm_dyn, _ = calculate_best_itr_dyn(best_itr, accuracy, prediction_time, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, cm_dyn)
-        accuracy_dynamic.append(accuracy)
+        accuracy, kappa, prediction_time, itr, cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, subjects_itrs_dyn, mean_scores_across_subjects, mean_kappa_across_subjects,mean_prediction_time_across_subjects, mean_itr_across_subjects  = run_expanding_classification_dynamic(subjects, threshold, best_itr_patience, best_confidence_type, initial_window_length, expansion_rate, sfreq, csp_components, c , kernel, gamma)
+        best_itr, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_subjects_itrs_dyn, best_cm_dyn, _ = calculate_best_itr_dyn(best_itr, accuracy, prediction_time, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_subjects_itrs_dyn, best_cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, subjects_itrs_dyn, cm_dyn)
+        accuracy_dynamic.append(accuracy)                                                                                                                                    
         kappa_dynamic.append(kappa)
         prediction_time_dynamic.append(prediction_time)
         itr_dynamic.append(itr)
@@ -648,9 +643,13 @@ def main_svm_expanding():
 
     '''
     Plotting and storing data
+     c = 1000 #best_params_expanding['C']
+    kernel = 'rbf' #best_params_expanding['kernel']
+    if kernel == 'rbf':
+        gamma = 0.01 
     '''
     #Write the optimal parameters
-    print(f"Chosen parameters: \n - csp: {csp_components}, \n - initial_window_length: {initial_window_length}\n - expansion-rate:  {expansion_rate} \n - confidence_type: {best_confidence_type}, \n - patience: {best_itr_patience} out of {patience_values}")
+    print(f"Chosen parameters: \n - csp: {csp_components}, \n - kernel: {kernel}, \n - C: {c}, \n - gamma: {gamma}, \n - initial_window_length: {initial_window_length}\n - expansion-rate:  {expansion_rate} \n - confidence_type: {best_confidence_type}, \n - patience: {best_itr_patience} out of {patience_values}")
     h = open(project_root + "/reports/figures/cumulative/SVM/dynamicVSstatic/expanding_model_optimal_parameters.txt", "w")
     h.write(f"Chosen parameters: \n - csp: {csp_components}, \n - initial_window_length: {initial_window_length}\n - expansion-rate:  {expansion_rate} \n - confidence_type: {best_confidence_type}, \n - patience: {best_itr_patience} out of {patience_values}")
     h.close()
@@ -659,7 +658,7 @@ def main_svm_expanding():
     subject_tuples = [(i+1, acc) for i, acc in enumerate(best_subjects_accuracies_dyn)]
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
     f = open(project_root + "/reports/figures/cumulative/SVM/dynamicVSstatic/expanding_dynamic_model_accuracy_by_subject.txt", "w")
-    f.write(f"Classification accuracy: {np.mean(accuracy_dynamic)}\n")
+    f.write(f"Classification accuracy - Dynamic Model: {np.mean(accuracy_dynamic)}\n")
     for subject, subject_accuracy in sorted_subjects:
         f.write(f"Subject {subject}: Accuracy: {subject_accuracy} \n")
         print(f"Subject {subject}: Accuracy: {subject_accuracy}")
@@ -670,7 +669,7 @@ def main_svm_expanding():
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
 
     f = open(project_root + "/reports/figures/cumulative/SVM/dynamicVSstatic/expanding_static_model_accuracy_by_subject.txt", "w")
-    f.write(f"Classification accuracy: {np.mean(accuracy_static)}\n")
+    f.write(f"Classification accuracy - Static Model: {np.mean(accuracy_static)}\n")
     for subject, subject_accuracy in sorted_subjects:
         f.write(f"Subject {subject}: Accuracy: {subject_accuracy} \n")
         print(f"Subject {subject}: Accuracy: {subject_accuracy}")
@@ -680,7 +679,7 @@ def main_svm_expanding():
     subject_tuples = [(i+1, acc) for i, acc in enumerate(best_subjects_kappa_dyn)]
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
     f = open(project_root + "/reports/figures/cumulative/SVM/dynamicVSstatic/expanding_dynamic_model_kappa_by_subject.txt", "w")
-    f.write(f"Average kappa: {np.mean(kappa_dynamic)}\n")
+    f.write(f"Average kappa - Dynamic Model: {np.mean(kappa_dynamic)}\n")
     for subject, subject_kappa in sorted_subjects:
         f.write(f"Subject {subject}: Kappa: {subject_kappa} \n")
         print(f"Subject {subject}: Kappa: {subject_kappa}")
@@ -691,7 +690,7 @@ def main_svm_expanding():
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
 
     f = open(project_root + "/reports/figures/cumulative/SVM/dynamicVSstatic/expanding_static_model_kappa_by_subject.txt", "w")
-    f.write(f"Average kappa: {np.mean(kappa_static)}\n")
+    f.write(f"Average kappa - Static Model: {np.mean(kappa_static)}\n")
     for subject, subject_kappa in sorted_subjects:
         f.write(f"Subject {subject}: Kappa: {subject_kappa} \n")
         print(f"Subject {subject}: Kappa: {subject_kappa}")
@@ -701,7 +700,7 @@ def main_svm_expanding():
     subject_tuples = [(i+1, acc) for i, acc in enumerate(best_subjects_itrs_dyn)]
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
     f = open(project_root + "/reports/figures/cumulative/SVM/dynamicVSstatic/expanding_dynamic_model_itrs_by_subject.txt", "w")
-    f.write(f"Average itr: {np.mean(itr_dynamic)}\n")
+    f.write(f"Average itr - Dynamic Model: {np.mean(itr_dynamic)}\n")
     for subject, subject_itr in sorted_subjects:
         f.write(f"Subject {subject}: ITR: {subject_itr} \n")
         print(f"Subject {subject}: ITR: {subject_itr}")
@@ -712,7 +711,7 @@ def main_svm_expanding():
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
 
     f = open(project_root + "/reports/figures/cumulative/SVM/dynamicVSstatic/expanding_static_model_itrs_by_subject.txt", "w")
-    f.write(f"Average ITR: {np.mean(itr_static)}\n")
+    f.write(f"Average itr - Static Model: {np.mean(itr_static)}\n")
     for subject, subject_itr in sorted_subjects:
         f.write(f"Subject {subject}: ITR: {subject_itr} \n")
         print(f"Subject {subject}: ITR: {subject_itr}")
@@ -722,7 +721,7 @@ def main_svm_expanding():
     subject_tuples = [(i+1, acc) for i, acc in enumerate(best_subjects_prediction_times_dyn)]
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
     f = open(project_root + "/reports/figures/cumulative/SVM/dynamicVSstatic/expanding_dynamic_model_predtime_by_subject.txt", "w")
-    f.write(f"Average prediction time: {np.mean(prediction_time_dynamic)}\n")
+    f.write(f"Average prediction time - Dynamic Model: {np.mean(prediction_time_dynamic)}\n")
     for subject, subject_prediction_time in sorted_subjects:
         f.write(f"Subject {subject}: Prediction time: {subject_prediction_time} \n")
         print(f"Subject {subject}: Prediction time: {subject_prediction_time}")
@@ -789,9 +788,9 @@ def main_svm_expanding():
 
     plot_confusion_matrix(cm_stat, best_cm_dyn)
     #for comparison with the sliding model to decide and choose the one that performs better
-    itr_dyn = best_itr
-    itr_stat = np.mean(itr_static)
-    return itr_dyn, itr_stat
+    #itr_dyn = best_itr
+    #itr_stat = np.mean(itr_static)
+    return 1#itr_dyn, itr_stat
 
 if __name__ == "__main__":
     main_svm_expanding()

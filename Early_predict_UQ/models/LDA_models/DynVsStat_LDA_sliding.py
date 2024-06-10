@@ -131,6 +131,7 @@ def run_sliding_classification_dynamic(subjects, threshold, patience, confidence
         kappa_across_epochs = []
         predict_time_across_epochs = []
         itrs_across_epochs = []
+        predictions = []
         for epoch_idx in range(len(test_indexes)):
             previous_class_index = None
             predict = False
@@ -149,66 +150,60 @@ def run_sliding_classification_dynamic(subjects, threshold, patience, confidence
                     score = lda.score(X_test_epoch_window.reshape(1, -1), [test_labels[epoch_idx]])
                     scores_across_epochs.append(score)
 
-                    # Calculate kappa for the window
-                    kappa = cohen_kappa_score(lda.predict(X_test_window), test_labels)
-                    kappa_across_epochs.append(kappa)
-
                     #prediction time
                     predict_time = n + w_length
                     predict_time_across_epochs.append(predict_time)
-
-                    #Confusion matrix
-                    predictions = lda.predict(X_test_window)
-                    cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
-                    number_cm +=1
+                    #For kappa, and confusion matrix
+                    prediction = lda.predict(X_test_epoch_window.reshape(1, -1))
+                    predictions.append(prediction)
                     break
             else:
                     #score
                     score = lda.score(X_test_epoch_window.reshape(1, -1), [test_labels[epoch_idx]])
                     scores_across_epochs.append(score)
 
-                    # Calculate kappa for the window
-                    kappa = cohen_kappa_score(lda.predict(X_test_window), test_labels)
-                    kappa_across_epochs.append(kappa)
-
                     #prediction time
                     #predict_time = n/250 +epochs.tmin()
                     predict_time_last = n + w_length #end of the last window
                     #print(f"couldnt predict early, pred time in seconds: {predict_time_last/sfreq + epochs.tmin} with w_length: {w_length/sfreq}")
                     predict_time_across_epochs.append(predict_time_last)
-
-                    #Confusion matrix
-                    predictions = lda.predict(X_test_window)
-                    cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
-                    number_cm +=1
+                    #For kappa, and confusion matrix
+                    prediction = lda.predict(X_test_epoch_window.reshape(1, -1))
+                    predictions.append(prediction)              
+        #Information transfer rate      
         _, _, _, _, _, _, itr = calculate_best_itr_dyn(best_itr = 0, accuracy = np.mean(scores_across_epochs), prediction_time = np.mean(predict_time_across_epochs), best_subjects_accuracies_dyn= None, best_subjects_prediction_times_dyn= None, best_subjects_kappa_dyn= None, best_subjects_itrs_dyn= None, best_cm_dyn= None, subjects_accuracies_dyn= None, subjects_prediction_times_dyn= None, subjects_kappa_dyn= None, subjects_itrs_dyn = None, cm_dyn = None)
         itrs_across_epochs = itr #single number
         itrs_across_subjects.append(itr)
+        #Kappa
+        kappa_score = cohen_kappa_score(predictions, test_labels)
+        kappa_across_epochs =  kappa_score #single number
+        kappa_across_subjects.append(kappa_score)
+        #Confusion matrix
+        cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
+        number_cm +=1
         if current_person == 1:
             scores_across_subjects  = scores_across_epochs
             prediction_time_across_subjects = predict_time_across_epochs
-            kappa_across_subjects = kappa_across_epochs
         else:
             scores_across_subjects = np.vstack((scores_across_subjects, scores_across_epochs))
             prediction_time_across_subjects = np.vstack((prediction_time_across_subjects, predict_time_across_epochs))
-            kappa_across_subjects = np.vstack((kappa_across_subjects, kappa_across_epochs))
         subjects_accuracies.append(np.mean(scores_across_epochs))
         subjects_prediction_times.append(np.mean(predict_time_across_epochs))
-        subjects_kappa.append(np.mean(kappa_across_epochs))
+        subjects_kappa = np.append(subjects_kappa,kappa_across_epochs)    
         subjects_itrs = np.append(subjects_itrs, itrs_across_epochs)
     #accuracy
     mean_scores_across_subjects = np.mean(scores_across_subjects, axis=0)
     accuracy = np.mean(mean_scores_across_subjects) #single number
     #kappa
-    mean_kappa_across_subjects = np.mean(kappa_across_subjects, axis=0)
-    kappa = np.mean(mean_kappa_across_subjects) #sinlge number
+    mean_kappa_across_subjects = np.array(kappa_across_subjects)
+    kappa = np.mean(mean_kappa_across_subjects)# single number
     #prediction time
     mean_prediction_time_across_subjects = np.mean(prediction_time_across_subjects, axis=0)
     prediction_time = np.mean(mean_prediction_time_across_subjects) #single number
     #itr
     mean_itr_across_subjects = np.array(itrs_across_subjects)
     itr = np.mean(mean_itr_across_subjects) #single number
-    ## calculate average confusion 
+    # calculate average confusion 
     cm = np.divide(cm, number_cm)
     return accuracy, kappa, prediction_time, itr, cm, subjects_accuracies, subjects_prediction_times, subjects_kappa, subjects_itrs, mean_scores_across_subjects, mean_kappa_across_subjects, mean_prediction_time_across_subjects, mean_itr_across_subjects
 

@@ -127,6 +127,7 @@ def run_expanding_classification_dynamic(subjects, threshold, patience, confiden
         kappa_across_epochs = []
         predict_time_across_epochs = []
         itrs_across_epochs = []
+        predictions = []
         for epoch_idx in range(len(test_indexes)):
             previous_class_index = None
             predict = False
@@ -145,57 +146,53 @@ def run_expanding_classification_dynamic(subjects, threshold, patience, confiden
                     #score
                     score = lda.score(X_test_epoch_window.reshape(1, -1), [test_labels[epoch_idx]])
                     scores_across_epochs.append(score)
-
-                    # Calculate kappa for the window
-                    kappa = cohen_kappa_score(lda.predict(X_test_window), test_labels)
-                    kappa_across_epochs.append(kappa)
-
+                    
                     #prediction time
                     predict_time = window_length
                     predict_time_across_epochs.append(predict_time)
 
-                    #Confusion matrix
-                    predictions = lda.predict(X_test_window)
-                    cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
-                    number_cm +=1
+                    #For kappa, and confusion matrix
+                    prediction = lda.predict(X_test_epoch_window.reshape(1, -1))
+                    predictions.append(prediction)
+
                     break
             else:
                     #score
                     score = lda.score(X_test_epoch_window.reshape(1, -1), [test_labels[epoch_idx]])
                     scores_across_epochs.append(score)
 
-                    # Calculate kappa for the window
-                    kappa = cohen_kappa_score(lda.predict(X_test_window), test_labels)
-                    kappa_across_epochs.append(kappa)
-
                     #prediction time
                     predict_time_last =  window_length#end of the last window
                     predict_time_across_epochs.append(predict_time_last)
-                    
-                    #Confusion matrix
-                    predictions = lda.predict(X_test_window)
-                    cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
-                    number_cm +=1
+                    #For kappa, and confusion matrix
+                    prediction = lda.predict(X_test_epoch_window.reshape(1, -1))
+                    predictions.append(prediction)
+        #Information transfer rate      
         _, _, _, _, _, _, itr = calculate_best_itr_dyn(best_itr = 0, accuracy = np.mean(scores_across_epochs), prediction_time = np.mean(predict_time_across_epochs), best_subjects_accuracies_dyn= None, best_subjects_prediction_times_dyn= None, best_subjects_kappa_dyn= None, best_subjects_itrs_dyn= None, best_cm_dyn= None, subjects_accuracies_dyn= None, subjects_prediction_times_dyn= None, subjects_kappa_dyn= None, subjects_itrs_dyn = None, cm_dyn = None)
         itrs_across_epochs = itr #single number
         itrs_across_subjects.append(itr)
+        #Kappa
+        kappa_score = cohen_kappa_score(predictions, test_labels)
+        kappa_across_epochs =  kappa_score #single number
+        kappa_across_subjects.append(kappa_score)
+        #Confusion matrix
+        cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
+        number_cm +=1
         if current_person == 1:
             scores_across_subjects  = scores_across_epochs
             prediction_time_across_subjects = predict_time_across_epochs
-            kappa_across_subjects = kappa_across_epochs
         else:
             scores_across_subjects = np.vstack((scores_across_subjects, scores_across_epochs))
             prediction_time_across_subjects = np.vstack((prediction_time_across_subjects, predict_time_across_epochs))
-            kappa_across_subjects = np.vstack((kappa_across_subjects, kappa_across_epochs))
         subjects_accuracies.append(np.mean(scores_across_epochs))
         subjects_prediction_times.append(np.mean(predict_time_across_epochs))
-        subjects_kappa.append(np.mean(kappa_across_epochs))    
+        subjects_kappa = np.append(subjects_kappa,kappa_across_epochs)    
         subjects_itrs = np.append(subjects_itrs, itrs_across_epochs)
     #accuracy
     mean_scores_across_subjects = np.mean(scores_across_subjects, axis=0)
     accuracy = np.mean(mean_scores_across_subjects) #single number
     #kappa
-    mean_kappa_across_subjects = np.mean(kappa_across_subjects, axis=0)
+    mean_kappa_across_subjects = np.array(kappa_across_subjects)
     kappa = np.mean(mean_kappa_across_subjects)# single number
     #prediction time
     mean_prediction_time_across_subjects = np.mean(prediction_time_across_subjects, axis=0)
@@ -324,6 +321,7 @@ def run_expanding_classification_static(subjects, initial_window_length, expansi
         itrs_across_epochs = []
         w_start = np.arange(0, test_data.shape[2] - initial_window_length, expansion_rate)
         pred_times = np.round(np.array(pred_times)).astype(int)
+        predictions = []
         for n, window_start in enumerate(pred_times):
             window_length = pred_times[n]
             X_test_window = csp.transform(test_data[:, :, w_start[0]: window_length])
@@ -517,13 +515,13 @@ def main_lda_expanding():
     '''
     #Hyperparameter_tuning for csp, and expanding window parameters using the static model, as we have limited compute
     print("\n\n Hyperparameter tuning (1): csp and window parameters \n\n")
-    parameters_list = create_parameterslist(sfreq)
-    best_params_expanding, _ = hyperparameter_tuning(parameters_list, subjects) #tuned on accuracy as we dont have pred time for itr
+    #parameters_list = create_parameterslist(sfreq)
+    #best_params_expanding, _ = hyperparameter_tuning(parameters_list, subjects) #tuned on accuracy as we dont have pred time for itr
     print("\n\n Hyperparameter tuning (1): completed \n\n")
     
-    csp_components = best_params_expanding['csp_components']
-    initial_window_length = best_params_expanding['initial_window_length']
-    expansion_rate = best_params_expanding['expansion_rate']
+    csp_components = 8 #best_params_expanding['csp_components']
+    initial_window_length = 250 #best_params_expanding['initial_window_length']
+    expansion_rate = 50 #best_params_expanding['expansion_rate']
 
     w_start= np.arange(0, epochs_info(length= True) - initial_window_length, expansion_rate) 
     confidence_types = ['highest_prob','difference_two_highest', 'neg_norm_shannon' ]
@@ -538,7 +536,7 @@ def main_lda_expanding():
     print("\n\n Hyperparameter tuning (2): patience and confidence type \n\n")
 
     #We tune with respect to ITR, as we not only want to focus on accuracy but also prediction time.
-    for j, confidence_type in enumerate(confidence_types):
+    '''for j, confidence_type in enumerate(confidence_types):
         # array to hold the average accuracy and prediction times with size len(confidence_type) x len(thre)
         best_itr_tune = 0
         best_itr_threshold = 0
@@ -554,8 +552,9 @@ def main_lda_expanding():
                 #given the varaibles, provide the average accuracy and prediction times (early prediction)
                 accuracy, kappa, prediction_time, _, _, _, _, _ , _, _, _, _, _ = run_expanding_classification_dynamic(subjects, threshold, patience, confidence_type, initial_window_length, expansion_rate, sfreq, csp_components)
                 best_itr_tune, best_itr_patience, best_itr_threshold, best_confidence_type = calculate_best_itr_dyn_tune(best_itr_tune, best_itr_patience, best_itr_threshold, best_confidence_type, accuracy, prediction_time, patience, threshold, confidence_type)
-    #best_itr_patience = 3
-    #best_confidence_type = 'highest_prob'
+    '''
+    best_itr_patience = 3
+    best_confidence_type = 'neg_norm_shannon'
     print("\n\n Hyperparameter tuning (2): completed\n\n")
     print(f"chosen patience: {best_itr_patience}, chosen confidence_type: {best_confidence_type}")
 
@@ -632,7 +631,7 @@ def main_lda_expanding():
     subject_tuples = [(i+1, acc) for i, acc in enumerate(best_subjects_accuracies_dyn)]
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
     f = open(project_root + "/reports/figures/cumulative/LDA/dynamicVSstatic/expanding_dynamic_model_accuracy_by_subject.txt", "w")
-    f.write(f"Classification accuracy: {np.mean(accuracy_dynamic)}\n")
+    f.write(f"Classification accuracy - Dynamic Model: {np.mean(accuracy_dynamic)}\n")
     for subject, subject_accuracy in sorted_subjects:
         f.write(f"Subject {subject}: Accuracy: {subject_accuracy} \n")
         print(f"Subject {subject}: Accuracy: {subject_accuracy}")
@@ -643,7 +642,7 @@ def main_lda_expanding():
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
 
     f = open(project_root + "/reports/figures/cumulative/LDA/dynamicVSstatic/expanding_static_model_accuracy_by_subject.txt", "w")
-    f.write(f"Classification accuracy: {np.mean(accuracy_static)}\n")
+    f.write(f"Classification accuracy - Static Model: {np.mean(accuracy_static)}\n")
     for subject, subject_accuracy in sorted_subjects:
         f.write(f"Subject {subject}: Accuracy: {subject_accuracy} \n")
         print(f"Subject {subject}: Accuracy: {subject_accuracy}")
@@ -653,7 +652,7 @@ def main_lda_expanding():
     subject_tuples = [(i+1, acc) for i, acc in enumerate(best_subjects_kappa_dyn)]
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
     f = open(project_root + "/reports/figures/cumulative/LDA/dynamicVSstatic/expanding_dynamic_model_kappa_by_subject.txt", "w")
-    f.write(f"Average kappa: {np.mean(kappa_dynamic)}\n")
+    f.write(f"Average kappa - Dynamic Model: {np.mean(kappa_dynamic)}\n")
     for subject, subject_kappa in sorted_subjects:
         f.write(f"Subject {subject}: Kappa: {subject_kappa} \n")
         print(f"Subject {subject}: Kappa: {subject_kappa}")
@@ -664,7 +663,7 @@ def main_lda_expanding():
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
 
     f = open(project_root + "/reports/figures/cumulative/LDA/dynamicVSstatic/expanding_static_model_kappa_by_subject.txt", "w")
-    f.write(f"Average kappa: {np.mean(kappa_static)}\n")
+    f.write(f"Average kappa - Static Model: {np.mean(kappa_static)}\n")
     for subject, subject_kappa in sorted_subjects:
         f.write(f"Subject {subject}: Kappa: {subject_kappa} \n")
         print(f"Subject {subject}: Kappa: {subject_kappa}")
@@ -674,7 +673,7 @@ def main_lda_expanding():
     subject_tuples = [(i+1, acc) for i, acc in enumerate(best_subjects_itrs_dyn)]
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
     f = open(project_root + "/reports/figures/cumulative/LDA/dynamicVSstatic/expanding_dynamic_model_itrs_by_subject.txt", "w")
-    f.write(f"Average itr: {np.mean(itr_dynamic)}\n")
+    f.write(f"Average itr - Dynamic Model: {np.mean(itr_dynamic)}\n")
     for subject, subject_itr in sorted_subjects:
         f.write(f"Subject {subject}: ITR: {subject_itr} \n")
         print(f"Subject {subject}: ITR: {subject_itr}")
@@ -685,7 +684,7 @@ def main_lda_expanding():
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
 
     f = open(project_root + "/reports/figures/cumulative/LDA/dynamicVSstatic/expanding_static_model_itrs_by_subject.txt", "w")
-    f.write(f"Average ITR: {np.mean(itr_static)}\n")
+    f.write(f"Average itr - Static Model: {np.mean(itr_static)}\n")
     for subject, subject_itr in sorted_subjects:
         f.write(f"Subject {subject}: ITR: {subject_itr} \n")
         print(f"Subject {subject}: ITR: {subject_itr}")
@@ -694,7 +693,7 @@ def main_lda_expanding():
     subject_tuples = [(i+1, acc) for i, acc in enumerate(best_subjects_prediction_times_dyn)]
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
     f = open(project_root + "/reports/figures/cumulative/LDA/dynamicVSstatic/expanding_dynamic_model_predtime_by_subject.txt", "w")
-    f.write(f"Average prediction time: {np.mean(prediction_time_dynamic)}\n")
+    f.write(f"Average prediction time - Dynamic Model: {np.mean(prediction_time_dynamic)}\n")
     for subject, subject_prediction_time in sorted_subjects:
         f.write(f"Subject {subject}: Prediction time: {subject_prediction_time} \n")
         print(f"Subject {subject}: Prediction time: {subject_prediction_time}")
