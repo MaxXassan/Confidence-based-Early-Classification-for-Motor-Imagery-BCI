@@ -1,26 +1,19 @@
-from cProfile import label
-from locale import windows_locale
 import os
 import sys
-from turtle import color
 import numpy as np
 from math import log2
 import matplotlib.pyplot as plt
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from scipy.stats import entropy
 from sklearn.model_selection import KFold
-from sklearn.metrics import cohen_kappa_score, confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import cohen_kappa_score, confusion_matrix
 import mne
 import logging
 # Set the logging level to ERROR to reduce verbosity
 mne.set_log_level(logging.ERROR)
 from mne.decoding import CSP
-
 from sklearn.model_selection import ParameterSampler
-import numpy as np
-
-
-
+import seaborn as sns
 current_directory = os.path.abspath('')
 
 project_root = current_directory
@@ -79,7 +72,7 @@ def early_pred(probabilities, predict, numTimesThresholdCrossed, patience, confi
     #Stopping rule: If confidence > threshold, and threshold reached n = patience times -> Predict early
     if np.round(confidence, 2) > threshold and not predict:
         numTimesThresholdCrossed += 1
-        #Predicit early
+        #Predict early
         if numTimesThresholdCrossed == patience:
             predict = True
     return predict, numTimesThresholdCrossed, previous_class_index
@@ -192,13 +185,13 @@ def run_sliding_classification_dynamic(subjects, threshold, patience, confidence
         subjects_kappa = np.append(subjects_kappa,kappa_across_epochs)    
         subjects_itrs = np.append(subjects_itrs, itrs_across_epochs)
     #accuracy
-    mean_scores_across_subjects = np.mean(scores_across_subjects, axis=0)
+    mean_scores_across_subjects = np.mean(scores_across_subjects, axis=1)
     accuracy = np.mean(mean_scores_across_subjects) #single number
     #kappa
     mean_kappa_across_subjects = np.array(kappa_across_subjects)
     kappa = np.mean(mean_kappa_across_subjects)# single number
     #prediction time
-    mean_prediction_time_across_subjects = np.mean(prediction_time_across_subjects, axis=0)
+    mean_prediction_time_across_subjects = np.mean(prediction_time_across_subjects, axis=1)
     prediction_time = np.mean(mean_prediction_time_across_subjects) #single number
     #itr
     mean_itr_across_subjects = np.array(itrs_across_subjects)
@@ -459,7 +452,6 @@ def epochs_info(labels=False, tmin=False, tmax = False, length=False):
 # B = log2 N + P log2 P + (1 − P)log2[(1 − P)/(N − 1)]
 # Q =  (60/T)
 # Bt = ITR  = B * Q (bits/min)
-# 
 def calculate_best_itr_dyn_tune(best_itr, best_itr_patience, best_itr_threshold, best_confidence_type, accuracy, prediction_time, patience, threshold, confidence_type):
     number_classes = 4 # we have 4 classes in this dataset
     current_B = log2(number_classes) + accuracy*log2(accuracy)+(1-accuracy)*log2((1-accuracy)/(number_classes-1))
@@ -493,29 +485,24 @@ def calculate_best_itr_dyn(best_itr, accuracy, prediction_time, best_subjects_ac
     return best_itr, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_subjects_itrs_dyn, best_cm_dyn, current_itr
 
 def plot_confusion_matrix(cm_stat, cm_dyn):
-    plt.figure()
+    # Plot confusion matrix for dynamic model
+    plt.figure()  # Increase the size of the plot
     plt.title(f"Confusion Matrix: LDA - Dynamic - Sliding model", fontsize=12)
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
-    #confusion matrix
-    displaycm = ConfusionMatrixDisplay(cm_dyn, display_labels=['left_hand', 'right_hand', 'tongue', 'feet'])
-    plt.grid(False)
-    displaycm.plot()
-    plt.grid(False)
+    s = sns.heatmap(cm_dyn, annot=True, fmt=".1f", cmap='magma', xticklabels=['left_hand', 'right_hand', 'tongue', 'feet'], yticklabels=['left_hand', 'right_hand', 'tongue', 'feet'])
+    s.set(xlabel='Predicted Label', ylabel='True Label')
     plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamicVSstatic/Sliding_dynamic_ConfusionMatrix.png')
 
-    plt.figure()
+    # Plot confusion matrix for static model
+    plt.figure()  # Increase the size of the plot
     plt.title(f"Confusion Matrix: LDA - Static - Sliding model", fontsize=12)
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
-    #confusion matrix
-    displaycm = ConfusionMatrixDisplay(cm_stat, display_labels=['left_hand', 'right_hand', 'tongue', 'feet'])
-    plt.grid(False)
-    displaycm.plot()
-    plt.grid(False)
-    plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamicVSstatic/Sliding_static_ConfusionMatrix.png')
-    
-    
+    s = sns.heatmap(cm_stat, annot=True, fmt=".1f", cmap='magma', xticklabels=['left_hand', 'right_hand', 'tongue', 'feet'], yticklabels=['left_hand', 'right_hand', 'tongue', 'feet'])
+    s.set(xlabel='Predicted Label', ylabel='True Label')
+
+    plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamicVSstatic/Sliding_static_ConfusionMatrix.png')  
 
 #Sliding - LDA
 def main_lda_sliding():
@@ -526,12 +513,13 @@ def main_lda_sliding():
     '''
     #Hyperparameter_tuning for csp, and expanding window parameters using the static model, as we have limited compute
     print("\n\n Hyperparameter tuning (1): csp and window parameters \n\n")
-    parameters_list = create_parameterslist(sfreq)
-    best_params_sliding, _ = hyperparameter_tuning(parameters_list, subjects) #tuned on accuracy as we dont have pred time for itr
+    
+    #parameters_list = create_parameterslist(sfreq)
+    #best_params_sliding, _ = hyperparameter_tuning(parameters_list, subjects) #tuned on accuracy as we dont have pred time for itr
     print("\n\n Hyperparameter tuning (1): completed \n\n")
-    csp_components =  best_params_sliding['csp_components']
-    w_length =  best_params_sliding['w_length']
-    w_step =  best_params_sliding['w_step']
+    csp_components =  8 #best_params_sliding['csp_components']
+    w_length =  185 #best_params_sliding['w_length']
+    w_step =  25 #best_params_sliding['w_step']
 
     w_start= np.arange(0, epochs_info(length= True) -  w_length,  w_step)  # epochs_info(length= True) = 1001
 
@@ -550,7 +538,7 @@ def main_lda_sliding():
     # over confidence values
 
     #We tune with respect to ITR, as we not only want to focus on accuracy but also prediction time.
-    for j, confidence_type in enumerate(confidence_types):
+    '''for j, confidence_type in enumerate(confidence_types):
         best_itr_tune = 0
         best_itr_threshold = 0
         best_itr_patience = 0
@@ -565,8 +553,9 @@ def main_lda_sliding():
                 #given the varaibles, provide the average accuracy and prediction times (early prediction)
                 accuracy, kappa, prediction_time, _, _, _, _, _ , _, _, _, _, _ = run_sliding_classification_dynamic(subjects, threshold, patience, confidence_type, w_length, w_step, sfreq, csp_components)
                 best_itr_tune, best_itr_patience, best_itr_threshold, best_confidence_type = calculate_best_itr_dyn_tune(best_itr_tune, best_itr_patience, best_itr_threshold, best_confidence_type, accuracy, prediction_time, patience, threshold, confidence_type)
-    #best_itr_patience = 3
-    #best_confidence_type = 'neg_norm_shannon'
+    '''
+    best_itr_patience = 3
+    best_confidence_type = 'neg_norm_shannon'
     print("\n\n Hyperparameter tuning (2): completed\n\n")
     print(f"chosen patience: {best_itr_patience}, chosen confidence_type: {best_confidence_type}")
 
@@ -645,7 +634,7 @@ def main_lda_sliding():
     subject_tuples = [(i+1, acc) for i, acc in enumerate(best_subjects_accuracies_dyn)]
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
     f = open(project_root + "/reports/figures/cumulative/LDA/dynamicVSstatic/sliding_dynamic_model_accuracy_by_subject.txt", "w")
-    f.write(f"Classification accuracy: {np.mean(accuracy_dynamic)}\n")
+    f.write(f"Classification accuracy - Dynamic Model: {np.mean(accuracy_dynamic)}\n")
     for subject, subject_accuracy in sorted_subjects:
         f.write(f"Subject {subject}: Accuracy: {subject_accuracy} \n")
         print(f"Subject {subject}: Accuracy: {subject_accuracy}")
@@ -656,7 +645,7 @@ def main_lda_sliding():
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
 
     f = open(project_root + "/reports/figures/cumulative/LDA/dynamicVSstatic/sliding_static_model_accuracy_by_subject.txt", "w")
-    f.write(f"Classification accuracy: {np.mean(accuracy_static)}\n")
+    f.write(f"Classification accuracy - Static Model: {np.mean(accuracy_static)}\n")
     for subject, subject_accuracy in sorted_subjects:
         f.write(f"Subject {subject}: Accuracy: {subject_accuracy} \n")
         print(f"Subject {subject}: Accuracy: {subject_accuracy}")
@@ -666,7 +655,7 @@ def main_lda_sliding():
     subject_tuples = [(i+1, acc) for i, acc in enumerate(best_subjects_kappa_dyn)]
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
     f = open(project_root + "/reports/figures/cumulative/LDA/dynamicVSstatic/sliding_dynamic_model_kappa_by_subject.txt", "w")
-    f.write(f"Average kappa: {np.mean(kappa_dynamic)}\n")
+    f.write(f"Average kappa - Dynamic Model: {np.mean(kappa_dynamic)}\n")
     for subject, subject_kappa in sorted_subjects:
         f.write(f"Subject {subject}: Kappa: {subject_kappa} \n")
         print(f"Subject {subject}: Kappa: {subject_kappa}")
@@ -677,7 +666,7 @@ def main_lda_sliding():
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
 
     f = open(project_root + "/reports/figures/cumulative/LDA/dynamicVSstatic/sliding_static_model_kappa_by_subject.txt", "w")
-    f.write(f"Average kappa: {np.mean(kappa_static)}\n")
+    f.write(f"Average kappa - Static Model: {np.mean(kappa_static)}\n")
     for subject, subject_kappa in sorted_subjects:
         f.write(f"Subject {subject}: Kappa: {subject_kappa} \n")
         print(f"Subject {subject}: Kappa: {subject_kappa}")
@@ -687,7 +676,7 @@ def main_lda_sliding():
     subject_tuples = [(i+1, acc) for i, acc in enumerate(best_subjects_itrs_dyn)]
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
     f = open(project_root + "/reports/figures/cumulative/LDA/dynamicVSstatic/sliding_dynamic_model_itrs_by_subject.txt", "w")
-    f.write(f"Average itr: {np.mean(itr_dynamic)}\n")
+    f.write(f"Average itr - Dynamic Model: {np.mean(itr_dynamic)}\n")
     for subject, subject_itr in sorted_subjects:
         f.write(f"Subject {subject}: ITR: {subject_itr} \n")
         print(f"Subject {subject}: ITR: {subject_itr}")
@@ -698,7 +687,7 @@ def main_lda_sliding():
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
 
     f = open(project_root + "/reports/figures/cumulative/LDA/dynamicVSstatic/sliding_static_model_itrs_by_subject.txt", "w")
-    f.write(f"Average ITR: {np.mean(itr_static)}\n")
+    f.write(f"Average ITR - Static Model: {np.mean(itr_static)}\n")
     for subject, subject_itr in sorted_subjects:
         f.write(f"Subject {subject}: ITR: {subject_itr} \n")
         print(f"Subject {subject}: ITR: {subject_itr}")
@@ -708,7 +697,7 @@ def main_lda_sliding():
     subject_tuples = [(i+1, acc) for i, acc in enumerate(best_subjects_prediction_times_dyn)]
     sorted_subjects = sorted(subject_tuples, key=lambda x: x[1], reverse=True)
     f = open(project_root + "/reports/figures/cumulative/LDA/dynamicVSstatic/sliding_dynamic_model_predtime_by_subject.txt", "w")
-    f.write(f"Average prediction time: {np.mean(prediction_time_dynamic)}\n")
+    f.write(f"Average prediction time - Dynamic Model: {np.mean(prediction_time_dynamic)}\n")
     for subject, subject_prediction_time in sorted_subjects:
         f.write(f"Subject {subject}: Prediction time: {subject_prediction_time} \n")
         print(f"Subject {subject}: Prediction time: {subject_prediction_time}")
@@ -719,7 +708,8 @@ def main_lda_sliding():
     sem_accuracy_dynamic = [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(accuracy_dynamic_total)] #(accuracy_dyn_tot: shape(thresholds, test_epochs)) - accuracies over x threshold, 288 epochs, averaged across the subjects. Finding SEM for each threshold value
     sem_pred_time_dynamic = [np.std(times) / np.sqrt(len(times)) for times in np.array(prediction_time_dynamic_total)]
     sem_accuracy_stat =  [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(scores_across_subjects_stat).T] #(scores_across_subjects_stat: (subjects, predtimes)) - 9 subjects, statically for each given prediction time from the dyn model(correlates to a specific threshold value)
-    plt.figure()
+    plt.figure(figsize=(8, 6)) 
+    plt.style.use('ggplot')
     plt.xlabel('Prediction time (sec)')
     plt.ylabel('Accuracy')
     plt.grid(True)
@@ -727,8 +717,8 @@ def main_lda_sliding():
     offset = tmax
     plt.axvline(onset, linestyle="--", color="r", label="Onset")
     plt.axvline(offset, linestyle="--", color="b", label="Offset")
-    plt.errorbar(prediction_time_dynamic, accuracy_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_accuracy_dynamic, label = "Dynamic model", fmt='o', color='blue', ecolor='red', linestyle='-', linewidth=2, capsize=3)
-    plt.errorbar(prediction_time_dynamic, accuracy_static, xerr = sem_pred_time_dynamic, yerr= sem_accuracy_stat, label = "Static model", fmt='s', color='green', ecolor='orange', linestyle='-', linewidth=2, capsize=3)
+    plt.errorbar(prediction_time_dynamic, accuracy_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_accuracy_dynamic, label = "Dynamic model", fmt='o', color='blue', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
+    plt.errorbar(prediction_time_dynamic, accuracy_static, xerr = sem_pred_time_dynamic, yerr= sem_accuracy_stat, label = "Static model", fmt='s', color='green', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
     plt.title("Sliding LDA models: Accuracy vs Pred time")
     plt.axhline(0.25, label= "Chance")
     plt.legend()
@@ -738,7 +728,8 @@ def main_lda_sliding():
     #plot kappa
     sem_kappa_dynamic = [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(kappa_dynamic_total)]
     sem_kappa_stat =  [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(kappa_across_subjects_stat).T]
-    plt.figure()
+    plt.figure(figsize=(8, 6)) 
+    plt.style.use('ggplot')
     plt.xlabel('Prediction time (sec)')
     plt.ylabel('Kappa')
     plt.grid(True)
@@ -747,8 +738,8 @@ def main_lda_sliding():
     offset = tmax
     plt.axvline(onset, linestyle="--", color="r", label="Onset")
     plt.axvline(offset, linestyle="--", color="b", label="Offset")
-    plt.errorbar(prediction_time_dynamic, kappa_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_kappa_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='red', linestyle='-', linewidth=2, capsize=3)
-    plt.errorbar(prediction_time_dynamic, kappa_static, xerr = sem_pred_time_dynamic, yerr= sem_kappa_stat, label = "Static model", fmt='s', color='green', ecolor='orange', linestyle='-', linewidth=2, capsize=3)
+    plt.errorbar(prediction_time_dynamic, kappa_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_kappa_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
+    plt.errorbar(prediction_time_dynamic, kappa_static, xerr = sem_pred_time_dynamic, yerr= sem_kappa_stat, label = "Static model", fmt='s', color='green', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
     plt.title("Sliding LDA models: Kappa vs Pred time")
     plt.legend()
     plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamicVSstatic/SlidingKappa.png')
@@ -757,7 +748,8 @@ def main_lda_sliding():
     #plot itrs
     sem_itr_dynamic = [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(itr_dynamic_total)]
     sem_itr_stat =  [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(itrs_across_subjects_stat).T]
-    plt.figure()
+    plt.figure(figsize=(8, 6)) 
+    plt.style.use('ggplot')
     plt.xlabel('Prediction time (sec)')
     plt.ylabel('Information transfer rate (bits/min)')
     plt.grid(True)
@@ -766,8 +758,8 @@ def main_lda_sliding():
     offset = tmax
     plt.axvline(onset, linestyle="--", color="r", label="Onset")
     plt.axvline(offset, linestyle="--", color="b", label="Offset")
-    plt.errorbar(prediction_time_dynamic, itr_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_itr_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='red', linestyle='-', linewidth=2, capsize=3)
-    plt.errorbar(prediction_time_dynamic, itr_static, xerr = sem_pred_time_dynamic, yerr= sem_itr_stat, label = "Static model", fmt='s', color='green', ecolor='orange', linestyle='-', linewidth=2, capsize=3)
+    plt.errorbar(prediction_time_dynamic, itr_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_itr_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
+    plt.errorbar(prediction_time_dynamic, itr_static, xerr = sem_pred_time_dynamic, yerr= sem_itr_stat, label = "Static model", fmt='s', color='green', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
     plt.title("Sliding LDA models: Information Transfer rate vs Pred time")
     plt.legend()
     plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamicVSstatic/SlidingItr.png')
@@ -775,30 +767,9 @@ def main_lda_sliding():
 
     plot_confusion_matrix(cm_stat, best_cm_dyn)
     #for comparison with the sliding model to decide and choose the one that performs better
-    itr_dyn = best_itr
+    itr_dyn = np.mean(itr_dynamic)
     itr_stat = np.mean(itr_static)
     return itr_dyn, itr_stat
-'''
-to do:
-#add error bars to the accuracy and kappa plots, (title and no title)
-   / #add accuracy of patience vs threshold plot(only for dynamic model) - it seems impossible ngl
-   / #add accuracy - dyn vs static for each subject - interesting
-#need to get multiple measurements from the models for each time point, to calculate the Standard erro of the mean
-#fix confusion matrix plot - make the numbers numbers make sense, label
-add itr plot and, see if patience is controlled - see if current way of itr is good
-#Have thresholds that are super close to 0 and super close 1, that might expand the plot
-Note what you changed here and modify elsewhere: 
-    - sampels vs seconds, 
-    - total for error bars, 
-    - if predict -> predict_time = n, 
-    - confusion matrix - not averaged
-    - save before show - plots
-    - if predict_time.any()
-    - if predict_time.any() -> (n-w_length:n) - outputing at the end of the window, but does that make sense
-
-#introduce way of finding best between sliding vs expanding - make another file for sliding, and output best_itr and use the file that has the best itr
-run full models
-'''
 
 if __name__ == "__main__":
     main_lda_sliding()

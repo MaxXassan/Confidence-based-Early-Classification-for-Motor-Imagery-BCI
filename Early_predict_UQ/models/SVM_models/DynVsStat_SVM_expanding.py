@@ -1,21 +1,19 @@
-from cProfile import label
-from locale import windows_locale
 import os
 import sys
 import numpy as np
 from math import log2
-import matplotlib.pyplot as plt
 from sklearn.svm import SVC
 from scipy.stats import entropy
 from sklearn.model_selection import KFold
-from sklearn.metrics import cohen_kappa_score, confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import cohen_kappa_score, confusion_matrix
 import mne
+import matplotlib.pyplot as plt
 import logging
 # Set the logging level to ERROR to reduce verbosity
 mne.set_log_level(logging.ERROR)
 from mne.decoding import CSP
 from sklearn.model_selection import ParameterSampler
-import numpy as np
+import seaborn as sns
 
 current_directory = os.path.abspath('')
 
@@ -75,7 +73,7 @@ def early_pred(probabilities, predict, numTimesThresholdCrossed, patience, confi
     #Stopping rule: If confidence > threshold, and threshold reached n = patience times -> Predict early
     if np.round(confidence, 2) > threshold and not predict:
         numTimesThresholdCrossed += 1
-        #Predicit early
+        #Predict early
         if numTimesThresholdCrossed == patience:
             predict = True
     return predict, numTimesThresholdCrossed, previous_class_index
@@ -194,13 +192,13 @@ def run_expanding_classification_dynamic(subjects, threshold, patience, confiden
         subjects_kappa = np.append(subjects_kappa,kappa_across_epochs)    
         subjects_itrs = np.append(subjects_itrs, itrs_across_epochs)
     #accuracy
-    mean_scores_across_subjects = np.mean(scores_across_subjects, axis=0)
+    mean_scores_across_subjects = np.mean(scores_across_subjects, axis=1)
     accuracy = np.mean(mean_scores_across_subjects) #single number
     #kappa
     mean_kappa_across_subjects = np.array(kappa_across_subjects)
     kappa = np.mean(mean_kappa_across_subjects)# single number
     #prediction time
-    mean_prediction_time_across_subjects = np.mean(prediction_time_across_subjects, axis=0)
+    mean_prediction_time_across_subjects = np.mean(prediction_time_across_subjects, axis=1)
     prediction_time = np.mean(mean_prediction_time_across_subjects) #single number
     #itr
     mean_itr_across_subjects = np.array(itrs_across_subjects)
@@ -352,14 +350,14 @@ def run_expanding_classification_static(subjects, initial_window_length, expansi
             _, _, _, _, _, _, itr = calculate_best_itr_dyn(best_itr = 0, accuracy = np.mean(scores_across_epochs), prediction_time = np.mean(pred_times), best_subjects_accuracies_dyn= None, best_subjects_prediction_times_dyn= None, best_subjects_kappa_dyn= None, best_subjects_itrs_dyn= None, best_cm_dyn= None, subjects_accuracies_dyn= None, subjects_prediction_times_dyn= None, subjects_kappa_dyn= None, subjects_itrs_dyn = None, cm_dyn = None)
             itrs_across_epochs.append(itr)
 
-            if current_person == 1:
-                scores_across_subjects  = np.array(scores_across_epochs)
-                kappa_across_subjects = np.array(kappa_across_epochs)
-                itrs_across_subjects = np.array(itrs_across_epochs)
-            else:
-                scores_across_subjects = np.vstack((scores_across_subjects,np.array(scores_across_epochs)))
-                kappa_across_subjects = np.vstack((kappa_across_subjects,np.array(kappa_across_epochs)))
-                itrs_across_subjects = np.vstack((itrs_across_subjects,np.array(itrs_across_epochs)))
+        if current_person == 1:
+            scores_across_subjects  = np.array(scores_across_epochs)
+            kappa_across_subjects = np.array(kappa_across_epochs)
+            itrs_across_subjects = np.array(itrs_across_epochs)
+        else:
+            scores_across_subjects = np.vstack((scores_across_subjects,np.array(scores_across_epochs)))
+            kappa_across_subjects = np.vstack((kappa_across_subjects,np.array(kappa_across_epochs)))
+            itrs_across_subjects = np.vstack((itrs_across_subjects,np.array(itrs_across_epochs)))
         #mean accuracy and kappa for each subject
         subjects_accuracies.append(np.mean(scores_across_epochs))
         subjects_kappa.append(np.mean(kappa_across_epochs))
@@ -504,33 +502,26 @@ def calculate_best_itr_dyn(best_itr, accuracy, prediction_time, best_subjects_ac
     return best_itr, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_subjects_itrs_dyn, best_cm_dyn, current_itr
 
 def plot_confusion_matrix(cm_stat, cm_dyn):
-    plt.figure()
+    # Plot confusion matrix for dynamic model
+    plt.figure()  # Increase the size of the plot
     plt.title(f"Confusion Matrix : SVM - Dynamic - Expanding model", fontsize=12)
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
-    #confusion matrix
-    displaycm = ConfusionMatrixDisplay(cm_dyn, display_labels=['left_hand', 'right_hand', 'tongue', 'feet'])
-    plt.grid(False)
-    displaycm.plot()
-    plt.grid(False)
-    
+    s = sns.heatmap(cm_dyn, annot=True, fmt=".1f", cmap='magma', xticklabels=['left_hand', 'right_hand', 'tongue', 'feet'], yticklabels=['left_hand', 'right_hand', 'tongue', 'feet'])
+    s.set(xlabel='Predicted Label', ylabel='True Label')
     plt.savefig(project_root + '/reports/figures/cumulative/SVM/dynamicVSstatic/Expanding_dynamic_ConfusionMatrix.png')
 
-    plt.figure()
+    # Plot confusion matrix for static model
+    plt.figure()  # Increase the size of the plot
     plt.title(f"Confusion Matrix : SVM - Static - Expanding model", fontsize=12)
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
-    #confusion matrix
-    displaycm = ConfusionMatrixDisplay(cm_stat, display_labels=['left_hand', 'right_hand', 'tongue', 'feet'])
-    plt.grid(False)
-    displaycm.plot()
-    plt.grid(False)
+    s = sns.heatmap(cm_stat, annot=True, fmt=".1f", cmap='magma', xticklabels=['left_hand', 'right_hand', 'tongue', 'feet'], yticklabels=['left_hand', 'right_hand', 'tongue', 'feet'])
+    s.set(xlabel='Predicted Label', ylabel='True Label')
     plt.savefig(project_root + '/reports/figures/cumulative/SVM/dynamicVSstatic/Expanding_static_ConfusionMatrix.png')
-    
-
 #Expanding model - SVM
 def main_svm_expanding():
-    subjects = [1,9]  # 9 subjects
+    subjects = [1,2,3,4,5,6,7,8,9]  # 9 subjects
     sfreq = 250    # Sampling frequency - 250Hz
     '''
     Hyperparameter tuning
@@ -555,7 +546,7 @@ def main_svm_expanding():
     confidence_types = ['highest_prob','difference_two_highest', 'neg_norm_shannon' ]
     patience_values = np.arange(1, len(w_start)) #need to control this by itr 
     # Threshold values -> [0.001, 0.01, 0.1 - 0.9, 0.99, 0.999]
-    threshold_values = np.array(np.arange(0.1, 1, 0.3)) #Have thresholds that are super close to 0 and super close 1, that might expand the plot
+    threshold_values = np.array(np.arange(0.1, 1, 0.1)) #Have thresholds that are super close to 0 and super close 1, that might expand the plot
     threshold_values =np.concatenate(([0.001, 0.01], threshold_values))
     threshold_values = np.append(threshold_values, [0.99, 0.999])
     #threshold_values = [0.1, 0.5, 0.9]
@@ -651,7 +642,7 @@ def main_svm_expanding():
     #Write the optimal parameters
     print(f"Chosen parameters: \n - csp: {csp_components}, \n - kernel: {kernel}, \n - C: {c}, \n - gamma: {gamma}, \n - initial_window_length: {initial_window_length}\n - expansion-rate:  {expansion_rate} \n - confidence_type: {best_confidence_type}, \n - patience: {best_itr_patience} out of {patience_values}")
     h = open(project_root + "/reports/figures/cumulative/SVM/dynamicVSstatic/expanding_model_optimal_parameters.txt", "w")
-    h.write(f"Chosen parameters: \n - csp: {csp_components}, \n - initial_window_length: {initial_window_length}\n - expansion-rate:  {expansion_rate} \n - confidence_type: {best_confidence_type}, \n - patience: {best_itr_patience} out of {patience_values}")
+    h.write(f"Chosen parameters: \n - csp: {csp_components}, \n - kernel: {kernel}, \n - C: {c}, \n - gamma: {gamma}, \n - initial_window_length: {initial_window_length}\n - expansion-rate:  {expansion_rate} \n - confidence_type: {best_confidence_type}, \n - patience: {best_itr_patience} out of {patience_values}")
     h.close()
 
     #write per subject accuracies - dynamic
@@ -732,7 +723,8 @@ def main_svm_expanding():
     sem_accuracy_dynamic = [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(accuracy_dynamic_total)] #(accuracy_dyn_tot: shape(thresholds, test_epochs)) - accuracies over x threshold, 288 epochs, averaged across the subjects. Finding SEM for each threshold value
     sem_pred_time_dynamic = [np.std(times) / np.sqrt(len(times)) for times in np.array(prediction_time_dynamic_total)]
     sem_accuracy_stat =  [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(scores_across_subjects_stat).T] #(scores_across_subjects_stat: (subjects, predtimes)) - 9 subjects, statically for each given prediction time from the dyn model(correlates to a specific threshold value)
-    plt.figure()
+    plt.figure(figsize=(8, 6)) 
+    plt.style.use('ggplot')
     plt.xlabel('Prediction time (sec)')
     plt.ylabel('Accuracy')
     plt.grid(True)
@@ -740,8 +732,8 @@ def main_svm_expanding():
     offset = tmax
     plt.axvline(onset, linestyle="--", color="r", label="Onset")
     plt.axvline(offset, linestyle="--", color="b", label="Offset")
-    plt.errorbar(prediction_time_dynamic, accuracy_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_accuracy_dynamic, label = "Dynamic model", fmt='o', color='blue', ecolor='red', linestyle='-', linewidth=2, capsize=3)
-    plt.errorbar(prediction_time_dynamic, accuracy_static, xerr = sem_pred_time_dynamic, yerr= sem_accuracy_stat, label = "Static model", fmt='s', color='green', ecolor='orange', linestyle='-', linewidth=2, capsize=3)
+    plt.errorbar(prediction_time_dynamic, accuracy_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_accuracy_dynamic, label = "Dynamic model", fmt='o', color='blue', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
+    plt.errorbar(prediction_time_dynamic, accuracy_static, xerr = sem_pred_time_dynamic, yerr= sem_accuracy_stat, label = "Static model", fmt='s', color='green', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
     plt.title("Expanding SVM models: Accuracy vs Pred time")
     plt.axhline(0.25, label= "Chance")
     plt.legend()
@@ -751,7 +743,8 @@ def main_svm_expanding():
     #plot kappa
     sem_kappa_dynamic = [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(kappa_dynamic_total)]
     sem_kappa_stat =  [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(kappa_across_subjects_stat).T]
-    plt.figure()
+    plt.figure(figsize=(8, 6)) 
+    plt.style.use('ggplot')
     plt.xlabel('Prediction time (sec)')
     plt.ylabel('Kappa')
     plt.grid(True)
@@ -760,8 +753,8 @@ def main_svm_expanding():
     offset = tmax
     plt.axvline(onset, linestyle="--", color="r", label="Onset")
     plt.axvline(offset, linestyle="--", color="b", label="Offset")
-    plt.errorbar(prediction_time_dynamic, kappa_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_kappa_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='red', linestyle='-', linewidth=2, capsize=3)
-    plt.errorbar(prediction_time_dynamic, kappa_static, xerr = sem_pred_time_dynamic, yerr= sem_kappa_stat, label = "Static model", fmt='s', color='green', ecolor='orange', linestyle='-', linewidth=2, capsize=3)
+    plt.errorbar(prediction_time_dynamic, kappa_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_kappa_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
+    plt.errorbar(prediction_time_dynamic, kappa_static, xerr = sem_pred_time_dynamic, yerr= sem_kappa_stat, label = "Static model", fmt='s', color='green', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
     plt.title("Expanding SVM models: Kappa vs Pred time")
     plt.legend()
     plt.savefig(project_root + '/reports/figures/cumulative/SVM/dynamicVSstatic/ExpandingKappa.png')
@@ -770,7 +763,8 @@ def main_svm_expanding():
     #plot itrs
     sem_itr_dynamic = [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(itr_dynamic_total)]
     sem_itr_stat =  [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(itrs_across_subjects_stat).T]
-    plt.figure()
+    plt.figure(figsize=(8, 6)) 
+    plt.style.use('ggplot')
     plt.xlabel('Prediction time (sec)')
     plt.ylabel('Information transfer rate (bits/min)')
     plt.grid(True)
@@ -779,18 +773,19 @@ def main_svm_expanding():
     offset = tmax
     plt.axvline(onset, linestyle="--", color="r", label="Onset")
     plt.axvline(offset, linestyle="--", color="b", label="Offset")
-    plt.errorbar(prediction_time_dynamic, itr_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_itr_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='red', linestyle='-', linewidth=2, capsize=3)
-    plt.errorbar(prediction_time_dynamic, itr_static, xerr = sem_pred_time_dynamic, yerr= sem_itr_stat, label = "Static model", fmt='s', color='green', ecolor='orange', linestyle='-', linewidth=2, capsize=3)
+    plt.errorbar(prediction_time_dynamic, itr_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_itr_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
+    plt.errorbar(prediction_time_dynamic, itr_static, xerr = sem_pred_time_dynamic, yerr= sem_itr_stat, label = "Static model", fmt='s', color='green', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
     plt.title("Expanding SVM models: Information Transfer rate vs Pred time")
     plt.legend()
+    plt.ylim(bottom=0)
     plt.savefig(project_root + '/reports/figures/cumulative/SVM/dynamicVSstatic/ExpandingItr.png')
     plt.show()
 
     plot_confusion_matrix(cm_stat, best_cm_dyn)
     #for comparison with the sliding model to decide and choose the one that performs better
-    #itr_dyn = best_itr
-    #itr_stat = np.mean(itr_static)
-    return 1#itr_dyn, itr_stat
+    itr_dyn = np.mean(itr_dynamic)
+    itr_stat = np.mean(itr_static)
+    return itr_dyn, itr_stat
 
 if __name__ == "__main__":
     main_svm_expanding()

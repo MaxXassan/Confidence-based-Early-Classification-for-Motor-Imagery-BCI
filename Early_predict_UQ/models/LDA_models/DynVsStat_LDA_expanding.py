@@ -1,22 +1,20 @@
-from cProfile import label
-from locale import windows_locale
 import os
 import sys
 import numpy as np
 from math import log2
-import matplotlib.pyplot as plt
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+import scipy
 from scipy.stats import entropy
 from sklearn.model_selection import KFold
-from sklearn.metrics import cohen_kappa_score, confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import cohen_kappa_score, confusion_matrix
 import mne
+import matplotlib.pyplot as plt
 import logging
 # Set the logging level to ERROR to reduce verbosity
 mne.set_log_level(logging.ERROR)
 from mne.decoding import CSP
 from sklearn.model_selection import ParameterSampler
-import numpy as np
-
+import seaborn as sns
 current_directory = os.path.abspath('')
 
 project_root = current_directory
@@ -75,7 +73,7 @@ def early_pred(probabilities, predict, numTimesThresholdCrossed, patience, confi
     #Stopping rule: If confidence > threshold, and threshold reached n = patience times -> Predict early
     if np.round(confidence, 2) > threshold and not predict:
         numTimesThresholdCrossed += 1
-        #Predicit early
+        #Predict early
         if numTimesThresholdCrossed == patience:
             predict = True
     return predict, numTimesThresholdCrossed, previous_class_index
@@ -92,7 +90,7 @@ def run_expanding_classification_dynamic(subjects, threshold, patience, confiden
     subjects_prediction_times = []
     subjects_itrs = []
     #confusion matrix
-    number_cm = 0 
+    number_cm = 0
     cm = np.zeros((4,4))
     current_person = 0
     for person in subjects:
@@ -115,13 +113,13 @@ def run_expanding_classification_dynamic(subjects, threshold, patience, confiden
 
         lda = LinearDiscriminantAnalysis()
         csp = CSP(n_components=csp_components, reg=None, log=True, norm_trace=False)
-        current_cv = 0 
-        
+        current_cv = 0
+
         #Training
         current_cv += 1
         X_train = csp.fit_transform(train_data, train_labels)
         lda.fit(X_train, train_labels)
-        w_start = np.arange(0, epochs_data.shape[2] - initial_window_length, expansion_rate) 
+        w_start = np.arange(0, epochs_data.shape[2] - initial_window_length, expansion_rate)
         #Testing/inference
         scores_across_epochs = []
         kappa_across_epochs = []
@@ -146,7 +144,7 @@ def run_expanding_classification_dynamic(subjects, threshold, patience, confiden
                     #score
                     score = lda.score(X_test_epoch_window.reshape(1, -1), [test_labels[epoch_idx]])
                     scores_across_epochs.append(score)
-                    
+
                     #prediction time
                     predict_time = window_length
                     predict_time_across_epochs.append(predict_time)
@@ -167,7 +165,7 @@ def run_expanding_classification_dynamic(subjects, threshold, patience, confiden
                     #For kappa, and confusion matrix
                     prediction = lda.predict(X_test_epoch_window.reshape(1, -1))
                     predictions.append(prediction)
-        #Information transfer rate      
+        #Information transfer rate
         _, _, _, _, _, _, itr = calculate_best_itr_dyn(best_itr = 0, accuracy = np.mean(scores_across_epochs), prediction_time = np.mean(predict_time_across_epochs), best_subjects_accuracies_dyn= None, best_subjects_prediction_times_dyn= None, best_subjects_kappa_dyn= None, best_subjects_itrs_dyn= None, best_cm_dyn= None, subjects_accuracies_dyn= None, subjects_prediction_times_dyn= None, subjects_kappa_dyn= None, subjects_itrs_dyn = None, cm_dyn = None)
         itrs_across_epochs = itr #single number
         itrs_across_subjects.append(itr)
@@ -186,21 +184,21 @@ def run_expanding_classification_dynamic(subjects, threshold, patience, confiden
             prediction_time_across_subjects = np.vstack((prediction_time_across_subjects, predict_time_across_epochs))
         subjects_accuracies.append(np.mean(scores_across_epochs))
         subjects_prediction_times.append(np.mean(predict_time_across_epochs))
-        subjects_kappa = np.append(subjects_kappa,kappa_across_epochs)    
+        subjects_kappa = np.append(subjects_kappa,kappa_across_epochs)
         subjects_itrs = np.append(subjects_itrs, itrs_across_epochs)
     #accuracy
-    mean_scores_across_subjects = np.mean(scores_across_subjects, axis=0)
+    mean_scores_across_subjects = np.mean(scores_across_subjects, axis=1)
     accuracy = np.mean(mean_scores_across_subjects) #single number
     #kappa
     mean_kappa_across_subjects = np.array(kappa_across_subjects)
     kappa = np.mean(mean_kappa_across_subjects)# single number
     #prediction time
-    mean_prediction_time_across_subjects = np.mean(prediction_time_across_subjects, axis=0)
+    mean_prediction_time_across_subjects = np.mean(prediction_time_across_subjects, axis=1) #issue here i think
     prediction_time = np.mean(mean_prediction_time_across_subjects) #single number
     #itr
     mean_itr_across_subjects = np.array(itrs_across_subjects)
-    itr = np.mean(mean_itr_across_subjects) #single number
-    # calculate average confusion 
+    itr = np.mean(mean_itr_across_subjects)
+    # calculate average confusion
     cm = np.divide(cm, number_cm)
     return accuracy, kappa, prediction_time, itr, cm, subjects_accuracies, subjects_prediction_times, subjects_kappa, subjects_itrs, mean_scores_across_subjects, mean_kappa_across_subjects, mean_prediction_time_across_subjects, mean_itr_across_subjects
 
@@ -286,16 +284,17 @@ def run_expanding_classification_static(subjects, initial_window_length, expansi
     subjects_kappa = []
     subjects_itrs = []
     current_person = 0
+    itr_trial = []
 
     #confusion matrix
-    number_cm = 0 
+    number_cm = 0
     cm = np.zeros((4,4))
     for person in subjects:
         current_person += 1
         subject= [person]
         epochs, labels = make_data(subject)
         epochs_data = epochs.get_data(copy=False)
-        
+
         #get the training set - first session of the data
         train_indexes = [i for i, epoch in enumerate(epochs) if epochs[i].metadata['session'].iloc[0] == '0train']
         train_data = epochs_data[train_indexes]
@@ -321,11 +320,10 @@ def run_expanding_classification_static(subjects, initial_window_length, expansi
         itrs_across_epochs = []
         w_start = np.arange(0, test_data.shape[2] - initial_window_length, expansion_rate)
         pred_times = np.round(np.array(pred_times)).astype(int)
-        predictions = []
         for n, window_start in enumerate(pred_times):
             window_length = pred_times[n]
             X_test_window = csp.transform(test_data[:, :, w_start[0]: window_length])
-            
+
             # Calculate accuracy for the window
             score = lda.score(X_test_window, test_labels)
             scores_across_epochs.append(score)
@@ -333,15 +331,14 @@ def run_expanding_classification_static(subjects, initial_window_length, expansi
             # Calculate kappa for the window
             kappa = cohen_kappa_score(lda.predict(X_test_window), test_labels)
             kappa_across_epochs.append(kappa)
-            
+
             #Confusion matrix
             predictions = lda.predict(X_test_window)
             cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
             number_cm +=1
             #ITR across epochs
-            _, _, _, _, _, _, itr = calculate_best_itr_dyn(best_itr = 0, accuracy = np.mean(scores_across_epochs), prediction_time = np.mean(pred_times), best_subjects_accuracies_dyn= None, best_subjects_prediction_times_dyn= None, best_subjects_kappa_dyn= None, best_subjects_itrs_dyn= None, best_cm_dyn= None, subjects_accuracies_dyn= None, subjects_prediction_times_dyn= None, subjects_kappa_dyn= None, subjects_itrs_dyn = None, cm_dyn = None)
+            _, _, _, _, _, _, itr = calculate_best_itr_dyn(best_itr = 0, accuracy = score, prediction_time = np.mean(pred_times), best_subjects_accuracies_dyn= None, best_subjects_prediction_times_dyn= None, best_subjects_kappa_dyn= None, best_subjects_itrs_dyn= None, best_cm_dyn= None, subjects_accuracies_dyn= None, subjects_prediction_times_dyn= None, subjects_kappa_dyn= None, subjects_itrs_dyn = None, cm_dyn = None)
             itrs_across_epochs.append(itr)
-            
         if current_person == 1:
             scores_across_subjects  = np.array(scores_across_epochs)
             kappa_across_subjects = np.array(kappa_across_epochs)
@@ -364,10 +361,9 @@ def run_expanding_classification_static(subjects, initial_window_length, expansi
     kappa = mean_kappa_across_subjects
     itr = mean_itr_across_subjects
 
-    # confusion matrix 
+    # confusion matrix
     cm = np.divide(cm, number_cm)
     return subjects_accuracies, scores_across_subjects, subjects_kappa, kappa_across_subjects, subjects_itrs, itrs_across_subjects, accuracy, kappa, itr, cm, csp
-
 '''Create parameter search space
     - Sample n_iter sets of parameters - set to 60 iterations. 
     - 60 iterations lets us reach the 95% confidence interval that we have found a set of parameters with "good values",
@@ -482,30 +478,22 @@ def calculate_best_itr_dyn(best_itr, accuracy, prediction_time, best_subjects_ac
     return best_itr, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_subjects_itrs_dyn, best_cm_dyn, current_itr
 
 def plot_confusion_matrix(cm_stat, cm_dyn):
-    plt.figure()
-    plt.title(f"Confusion Matrix : LDA - Dynamic - Expanding model", fontsize=12)
+    plt.figure()  # Increase the size of the plot
+    plt.title("Confusion Matrix: LDA - Dynamic - Expanding model", fontsize=12)
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
-    #confusion matrix
-    displaycm = ConfusionMatrixDisplay(cm_dyn, display_labels=['left_hand', 'right_hand', 'tongue', 'feet'])
-    plt.grid(False)
-    displaycm.plot()
-    plt.grid(False)
-    
+    s = sns.heatmap(cm_dyn, annot=True, fmt=".1f", cmap='magma', xticklabels=['left_hand', 'right_hand', 'tongue', 'feet'], yticklabels=['left_hand', 'right_hand', 'tongue', 'feet'])
+    s.set(xlabel='Predicted Label', ylabel='True Label')
     plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamicVSstatic/Expanding_dynamic_ConfusionMatrix.png')
 
-    plt.figure()
-    plt.title(f"Confusion Matrix : LDA - Static - Expanding model", fontsize=12)
+    # Plot confusion matrix for static model
+    plt.figure() # Increase the size of the plot
+    plt.title("Confusion Matrix: LDA - Static - Expanding model", fontsize=12)
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
-    #confusion matrix
-    displaycm = ConfusionMatrixDisplay(cm_stat, display_labels=['left_hand', 'right_hand', 'tongue', 'feet'])
-    plt.grid(False)
-    displaycm.plot()
-    plt.grid(False)
+    s = sns.heatmap(cm_stat, annot=True, fmt=".1f", cmap='magma', xticklabels=['left_hand', 'right_hand', 'tongue', 'feet'], yticklabels=['left_hand', 'right_hand', 'tongue', 'feet'])
+    s.set(xlabel='Predicted Label', ylabel='True Label')
     plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamicVSstatic/Expanding_static_ConfusionMatrix.png')
-    
-
 #Expanding model - LDA
 def main_lda_expanding():
     subjects = [1,2,3,4,5,6,7,8,9]  # 9 subjects
@@ -704,7 +692,8 @@ def main_lda_expanding():
     sem_accuracy_dynamic = [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(accuracy_dynamic_total)] #(accuracy_dyn_tot: shape(thresholds, test_epochs)) - accuracies over x threshold, 288 epochs, averaged across the subjects. Finding SEM for each threshold value
     sem_pred_time_dynamic = [np.std(times) / np.sqrt(len(times)) for times in np.array(prediction_time_dynamic_total)]
     sem_accuracy_stat =  [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(scores_across_subjects_stat).T] #(scores_across_subjects_stat: (subjects, predtimes)) - 9 subjects, statically for each given prediction time from the dyn model(correlates to a specific threshold value)
-    plt.figure()
+    plt.figure(figsize=(8, 6)) 
+    plt.style.use('ggplot')
     plt.xlabel('Prediction time (sec)')
     plt.ylabel('Accuracy')
     plt.grid(True)
@@ -713,8 +702,8 @@ def main_lda_expanding():
     offset = tmax
     plt.axvline(onset, linestyle="--", color="r", label="Onset")
     plt.axvline(offset, linestyle="--", color="b", label="Offset")
-    plt.errorbar(prediction_time_dynamic, accuracy_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_accuracy_dynamic, label = "Dynamic model", fmt='o', color='blue', ecolor='red', linestyle='-', linewidth=2, capsize=3)
-    plt.errorbar(prediction_time_dynamic, accuracy_static, xerr = sem_pred_time_dynamic, yerr= sem_accuracy_stat, label = "Static model", fmt='s', color='green', ecolor='orange', linestyle='-', linewidth=2, capsize=3)
+    plt.errorbar(prediction_time_dynamic, accuracy_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_accuracy_dynamic, label = "Dynamic model", fmt='o', color='blue', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
+    plt.errorbar(prediction_time_dynamic, accuracy_static, xerr = sem_pred_time_dynamic, yerr= sem_accuracy_stat, label = "Static model", fmt='s', color='green', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
     plt.title("Expanding LDA models: Accuracy vs Pred time")
     plt.axhline(0.25, label= "Chance")
     plt.legend()
@@ -724,7 +713,8 @@ def main_lda_expanding():
     #plot kappa
     sem_kappa_dynamic = [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(kappa_dynamic_total)]
     sem_kappa_stat =  [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(kappa_across_subjects_stat).T]
-    plt.figure()
+    plt.figure(figsize=(8, 6)) 
+    plt.style.use('ggplot')
     plt.xlabel('Prediction time (sec)')
     plt.ylabel('Kappa')
     plt.grid(True)
@@ -733,17 +723,19 @@ def main_lda_expanding():
     offset = tmax
     plt.axvline(onset, linestyle="--", color="r", label="Onset")
     plt.axvline(offset, linestyle="--", color="b", label="Offset")
-    plt.errorbar(prediction_time_dynamic, kappa_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_kappa_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='red', linestyle='-', linewidth=2, capsize=3)
-    plt.errorbar(prediction_time_dynamic, kappa_static, xerr = sem_pred_time_dynamic, yerr= sem_kappa_stat, label = "Static model", fmt='s', color='green', ecolor='orange', linestyle='-', linewidth=2, capsize=3)
+    plt.errorbar(prediction_time_dynamic, kappa_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_kappa_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
+    plt.errorbar(prediction_time_dynamic, kappa_static, xerr = sem_pred_time_dynamic, yerr= sem_kappa_stat, label = "Static model", fmt='s', color='green', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
     plt.title("Expanding LDA models: Kappa vs Pred time")
     plt.legend()
+    plt.ylim(bottom=0)
     plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamicVSstatic/ExpandingKappa.png')
     plt.show()
 
     #plot itrs
     sem_itr_dynamic = [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(itr_dynamic_total)]
     sem_itr_stat =  [np.std(scores) / np.sqrt(len(scores)) for scores in np.array(itrs_across_subjects_stat).T]
-    plt.figure()
+    plt.figure(figsize=(8, 6)) 
+    plt.style.use('ggplot')
     plt.xlabel('Prediction time (sec)')
     plt.ylabel('Information transfer rate (bits/min)')
     plt.grid(True)
@@ -752,16 +744,17 @@ def main_lda_expanding():
     offset = tmax
     plt.axvline(onset, linestyle="--", color="r", label="Onset")
     plt.axvline(offset, linestyle="--", color="b", label="Offset")
-    plt.errorbar(prediction_time_dynamic, itr_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_itr_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='red', linestyle='-', linewidth=2, capsize=3)
-    plt.errorbar(prediction_time_dynamic, itr_static, xerr = sem_pred_time_dynamic, yerr= sem_itr_stat, label = "Static model", fmt='s', color='green', ecolor='orange', linestyle='-', linewidth=2, capsize=3)
+    plt.errorbar(prediction_time_dynamic, itr_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_itr_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
+    plt.errorbar(prediction_time_dynamic, itr_static, xerr = sem_pred_time_dynamic, yerr= sem_itr_stat, label = "Static model", fmt='s', color='green', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
     plt.title("Expanding LDA models: Information Transfer rate vs Pred time")
     plt.legend()
+    plt.ylim(bottom=0)
     plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamicVSstatic/ExpandingItr.png')
     plt.show()
 
     plot_confusion_matrix(cm_stat, best_cm_dyn)
     #for comparison with the sliding model to decide and choose the one that performs better
-    itr_dyn = best_itr
+    itr_dyn = np.mean(itr_dynamic)
     itr_stat = np.mean(itr_static)
     return itr_dyn, itr_stat
 
