@@ -70,7 +70,7 @@ def early_pred(probabilities, predict, numTimesThresholdCrossed, patience, confi
             numTimesThresholdCrossed = 0
             previous_class_index = index_highest 
 
-    #Stopping rule: If confidence > threshold, and threshold reached n = patience times -> Predict early
+    #Stopping rule: If confidence > threshold, and threshold reached n = patience times in a row -> Predict early
     if np.round(confidence, 2) > threshold and not predict:
         numTimesThresholdCrossed += 1
         #Predict early
@@ -337,7 +337,7 @@ def run_expanding_classification_static(subjects, initial_window_length, expansi
             cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
             number_cm +=1
             #ITR across epochs
-            _, _, _, _, _, _, itr = calculate_best_itr_dyn(best_itr = 0, accuracy = score, prediction_time = np.mean(pred_times), best_subjects_accuracies_dyn= None, best_subjects_prediction_times_dyn= None, best_subjects_kappa_dyn= None, best_subjects_itrs_dyn= None, best_cm_dyn= None, subjects_accuracies_dyn= None, subjects_prediction_times_dyn= None, subjects_kappa_dyn= None, subjects_itrs_dyn = None, cm_dyn = None)
+            _, _, _, _, _, _, itr = calculate_best_itr_dyn(best_itr = 0, accuracy = score, prediction_time = pred_times[n], best_subjects_accuracies_dyn= None, best_subjects_prediction_times_dyn= None, best_subjects_kappa_dyn= None, best_subjects_itrs_dyn= None, best_cm_dyn= None, subjects_accuracies_dyn= None, subjects_prediction_times_dyn= None, subjects_kappa_dyn= None, subjects_itrs_dyn = None, cm_dyn = None)
             itrs_across_epochs.append(itr)
         if current_person == 1:
             scores_across_subjects  = np.array(scores_across_epochs)
@@ -519,7 +519,6 @@ def main_lda_expanding():
     threshold_values = np.array(np.arange(0.1, 1, 0.1)) #Have thresholds that are super close to 0 and super close 1, that might expand the plot
     threshold_values =np.concatenate(([0.001, 0.01], threshold_values))
     threshold_values = np.append(threshold_values, [0.99, 0.999])
-    #threshold_values = [0.1, 0.5, 0.9]
     #Find optimal confidence type and patience from the expanding dynamic model using itr
     print("\n\n Hyperparameter tuning (2): patience and confidence type \n\n")
 

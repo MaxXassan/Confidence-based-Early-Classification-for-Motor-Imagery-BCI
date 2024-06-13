@@ -347,7 +347,7 @@ def run_expanding_classification_static(subjects, initial_window_length, expansi
             cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
             number_cm +=1
             #ITR across epochs
-            _, _, _, _, _, _, itr = calculate_best_itr_dyn(best_itr = 0, accuracy = np.mean(scores_across_epochs), prediction_time = np.mean(pred_times), best_subjects_accuracies_dyn= None, best_subjects_prediction_times_dyn= None, best_subjects_kappa_dyn= None, best_subjects_itrs_dyn= None, best_cm_dyn= None, subjects_accuracies_dyn= None, subjects_prediction_times_dyn= None, subjects_kappa_dyn= None, subjects_itrs_dyn = None, cm_dyn = None)
+            _, _, _, _, _, _, itr = calculate_best_itr_dyn(best_itr = 0, accuracy = score, prediction_time = pred_times[n], best_subjects_accuracies_dyn= None, best_subjects_prediction_times_dyn= None, best_subjects_kappa_dyn= None, best_subjects_itrs_dyn= None, best_cm_dyn= None, subjects_accuracies_dyn= None, subjects_prediction_times_dyn= None, subjects_kappa_dyn= None, subjects_itrs_dyn = None, cm_dyn = None)
             itrs_across_epochs.append(itr)
 
         if current_person == 1:
@@ -601,9 +601,12 @@ def main_svm_expanding():
         #dynamic model evaluation
         accuracy, kappa, prediction_time, itr, cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, subjects_itrs_dyn, mean_scores_across_subjects, mean_kappa_across_subjects,mean_prediction_time_across_subjects, mean_itr_across_subjects  = run_expanding_classification_dynamic(subjects, threshold, best_itr_patience, best_confidence_type, initial_window_length, expansion_rate, sfreq, csp_components, c , kernel, gamma)
         best_itr, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_subjects_itrs_dyn, best_cm_dyn, _ = calculate_best_itr_dyn(best_itr, accuracy, prediction_time, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_subjects_itrs_dyn, best_cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, subjects_itrs_dyn, cm_dyn)
-        accuracy_dynamic.append(accuracy)                                                                                                                                    
+        accuracy_dynamic.append(accuracy)
         kappa_dynamic.append(kappa)
         prediction_time_dynamic.append(prediction_time)
+        accuracy_dynamic_total.append(mean_scores_across_subjects)
+        kappa_dynamic_total.append(mean_kappa_across_subjects)
+        prediction_time_dynamic_total.append(mean_prediction_time_across_subjects)
         itr_dynamic.append(itr)
         itr_dynamic_total.append(mean_itr_across_subjects)
     
