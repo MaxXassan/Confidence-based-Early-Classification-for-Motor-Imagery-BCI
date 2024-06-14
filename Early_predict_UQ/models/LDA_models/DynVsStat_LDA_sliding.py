@@ -24,6 +24,7 @@ print("ROOT:", project_root)
 VALID_CONFIDENCE_TYPES = {'highest_prob', 'difference_two_highest', 'neg_norm_shannon'}
 #Static hyperparameter tuning
 from Early_predict_UQ.data.make_dataset import make_data
+from Tune_LDA_sliding import tune_lda_sliding
 #Set confidence value given probabilities and method
 def find_confidence(confidence_type, probabilities):
     probabilities = probabilities.flatten()
@@ -78,7 +79,7 @@ def early_pred(probabilities, predict, numTimesThresholdCrossed, patience, confi
     return predict, numTimesThresholdCrossed, previous_class_index
 
 #Given sliding window and stopping values, we average the accuracy and prediction time for the model
-def run_sliding_classification_dynamic(subjects, threshold, patience, confidence_type, w_length, w_step, sfreq, csp_components):
+def run_sliding_classification_dynamic(subjects, threshold, patience, confidence_type, w_length, w_step, sfreq, csp_components, solver, shrinkage, n_components, tol):
     scores_across_subjects = []
     kappa_across_subjects = []
     prediction_time_across_subjects = []
@@ -110,7 +111,10 @@ def run_sliding_classification_dynamic(subjects, threshold, patience, confidence
         test_data = epochs_data[test_indexes]
         test_labels = labels[test_indexes]
 
-        lda = LinearDiscriminantAnalysis()
+        if solver == 'svd':
+            lda = LinearDiscriminantAnalysis(solver = solver, tol = tol, n_components = n_components)
+        else:
+            lda = LinearDiscriminantAnalysis(solver = solver, shrinkage = shrinkage, n_components = n_components)
         csp = CSP(n_components=csp_components, reg=None, log=True, norm_trace=False)
         current_cv = 0 
         
@@ -202,77 +206,8 @@ def run_sliding_classification_dynamic(subjects, threshold, patience, confidence
 
 #Sldiding window - classification - tuning using kfold cross validation
    ##calculate kappa and accuracy at each window step
-def run_sliding_classification_tuning_static(subjects, w_length, w_step, csp_components):
-    scores_across_subjects = []
-    kappa_across_subjects = []
-
-    subjects_accuracies =[]
-    subjects_kappa = []
-    current_person = 0
-    for person in subjects:
-        current_person += 1
-        print("Person %d" % (person))
-        subject= [person]
-        epochs, labels = make_data(subject)
-
-        #get the training set - first session of the data for each subject
-        train_indexes = [i for i, epoch in enumerate(epochs) if epochs[i].metadata['session'].iloc[0] == '0train']
-        epochs_data = epochs.get_data(copy = False)
-        train_data = epochs_data[train_indexes]
-        train_labels = labels[train_indexes]
-
-
-        cv = KFold(n_splits=10, shuffle = True, random_state=42)
-
-        scores_cv_splits = []
-        kappa_cv_splits  = []
-
-        lda = LinearDiscriminantAnalysis()
-        csp = CSP(n_components= csp_components, reg=None, log=True, norm_trace=False)
-        current_cv = 0 
-        for train_idx, test_idx in cv.split(train_data):
-            current_cv += 1
-            y_train, y_test = train_labels[train_idx], train_labels[test_idx]
-            X_train = csp.fit_transform(train_data[train_idx], y_train)
-            lda.fit(X_train, y_train)
-            w_start = np.arange(0, train_data.shape[2] - w_length, w_step) 
-            scores_across_epochs = []
-            kappa_across_epochs = []
-            for n in w_start:
-                X_test_window = csp.transform(train_data[test_idx][:, :, n:(n + w_length)])
-                #accuracy
-                score = lda.score(X_test_window, y_test)
-                scores_across_epochs.append(score)
-
-                #kappa
-                kappa = cohen_kappa_score(lda.predict(X_test_window), y_test) 
-                kappa_across_epochs.append(kappa)
-            if current_cv == 1:
-                scores_cv_splits = np.array(scores_across_epochs)
-                kappa_cv_splits = np.array(kappa_across_epochs)
-            else:
-                scores_cv_splits = np.vstack((scores_cv_splits,np.array(scores_across_epochs)))
-                kappa_cv_splits = np.vstack((kappa_cv_splits,np.array(kappa_across_epochs)))
-        mean_scores_across_cv = np.mean(scores_cv_splits, axis=0)
-        mean_kappa_across_cv = np.mean(kappa_cv_splits, axis=0)
-        if current_person == 1:
-            scores_across_subjects  = np.array(mean_scores_across_cv)
-            kappa_across_subjects  = np.array(mean_kappa_across_cv)
-        else:
-            scores_across_subjects = np.vstack((scores_across_subjects,np.array(mean_scores_across_cv)))
-            kappa_across_subjects = np.vstack((kappa_across_subjects,np.array(mean_kappa_across_cv)))
-
-        subjects_accuracies.append(np.mean(mean_scores_across_cv))
-        subjects_kappa.append(np.mean(mean_kappa_across_cv))
-
-    mean_scores_across_subjects = np.mean(scores_across_subjects, axis=0)
-    mean_kappa_across_subjects = np.mean(kappa_across_subjects, axis=0)
-    accuracy = mean_scores_across_subjects
-    kappa = mean_kappa_across_subjects
-
-    return subjects_accuracies, scores_across_subjects, subjects_kappa, kappa_across_subjects, accuracy, kappa
  
-def run_sliding_classification_static(subjects, w_length, w_step, csp_components, pred_times):
+def run_sliding_classification_static(subjects, w_length, w_step, csp_components, pred_times, solver, shrinkage, n_components, tol):
     scores_across_subjects = []
     kappa_across_subjects = []
     itrs_across_subjects = []
@@ -301,7 +236,10 @@ def run_sliding_classification_static(subjects, w_length, w_step, csp_components
         test_data = epochs_data[test_indexes]
         test_labels = labels[test_indexes]
 
-        lda = LinearDiscriminantAnalysis()
+        if solver == 'svd':
+            lda = LinearDiscriminantAnalysis(solver = solver, tol = tol, n_components = n_components)
+        else:
+            lda = LinearDiscriminantAnalysis(solver = solver, shrinkage = shrinkage, n_components = n_components)
         csp = CSP(n_components=csp_components, reg=None, log=True, norm_trace=False)
 
         # Fit CSP on training data
@@ -368,55 +306,6 @@ def run_sliding_classification_static(subjects, w_length, w_step, csp_components
     - 1-0.95^(60) = 0.953 > 0.95
     (Random Search for Hyper-Parameter Optimization - Bergstra & Bengio (2012))
 '''
-
-def create_parameterslist(sfreq):
-    rng = np.random.RandomState(42)
-
-    #max intial_length and epxansion rate to be 1/4 of the trial during the MI task - 1 second
-    w_length_values = np.round(rng.uniform(0.1, 1, 10), 2)   
-
-    #max step is the length of the window. 
-    w_step_values = []
-    for w_length in w_length_values:
-        max_step = max(0.1, 0.99 * w_length)
-        w_step = np.round(rng.uniform(0.1, max_step), 1) 
-        w_step_values.append(w_step)  
-    
-    #Turne into samples - 0.1s is 25 samples, 1s is 250 samples, 4s = epochs length = 1001 , sfreq = 250
-    w_length_values = np.round(np.array(w_length_values) * sfreq).astype(int)
-    w_step_values = np.round(np.array(w_step_values) * sfreq).astype(int)
-    
-    parameters = {  
-        # 1, 2 filters for each class, as we have 4 classes.
-        'csp_components': [4, 8], # more than 8 was reading into noise - occipital lobe pattern
-        'w_length': w_length_values, 
-        'w_step': w_step_values
-    }
-
-
-    parameters_list = list(ParameterSampler(parameters, n_iter=60, random_state=rng))
-    return parameters_list
-
-#Random search and return the best parameter values and its accuracy
-def hyperparameter_tuning (parameters_list, subjects):
-    mean_accuracy = 0
-    best_accuracy = 0
-    for n, param_set in enumerate(parameters_list):
-        csp_components = param_set['csp_components']
-        w_length = param_set['csp_components'] 
-        w_step =  param_set['w_step']
-        _, _, _, _, accuracy, _ = run_sliding_classification_tuning_static(subjects, w_length, w_step, csp_components)
-        
-        mean_accuracy = np.mean(accuracy)
-
-        print(f"Iteration {n+1}/{len(parameters_list)}: Mean accuracy for parameters {param_set} is {mean_accuracy}")
-
-        if mean_accuracy > best_accuracy:
-            best_accuracy = mean_accuracy
-            best_params_sliding = param_set
-
-    return best_params_sliding, best_accuracy
-
 #Access general epoch information
 def epochs_info(labels=False, tmin=False, tmax = False, length=False):
     global epochs_data
@@ -451,21 +340,7 @@ def epochs_info(labels=False, tmin=False, tmax = False, length=False):
 #current Source but actually details the problems with the method: Yuan et.al.  https://iopscience-iop-org.proxy-ub.rug.nl/article/10.1088/1741-2560/10/2/026014/pdf
 # B = log2 N + P log2 P + (1 − P)log2[(1 − P)/(N − 1)]
 # Q =  (60/T)
-# Bt = ITR  = B * Q (bits/min)
-def calculate_best_itr_dyn_tune(best_itr, best_itr_patience, best_itr_threshold, best_confidence_type, accuracy, prediction_time, patience, threshold, confidence_type):
-    number_classes = 4 # we have 4 classes in this dataset
-    current_B = log2(number_classes) + accuracy*log2(accuracy)+(1-accuracy)*log2((1-accuracy)/(number_classes-1))
-
-    prediction_time = prediction_time/250 #turning prediction time to seconds first
-    current_Q =  60/prediction_time 
-
-    current_itr = current_B * current_Q
-    if current_itr > best_itr:
-        best_itr_patience = patience
-        best_itr_threshold = threshold
-        best_itr = current_itr
-        best_confidence_type = confidence_type
-    return best_itr, best_itr_patience, best_itr_threshold, best_confidence_type
+# Bt = ITR  = B * Q (bits/min
 
 def calculate_best_itr_dyn(best_itr, accuracy, prediction_time, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_subjects_itrs_dyn, best_cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, subjects_itrs_dyn, cm_dyn):
     number_classes = 4 # we have 4 classes in this dataset
@@ -508,56 +383,25 @@ def plot_confusion_matrix(cm_stat, cm_dyn):
 def main_lda_sliding():
     subjects = [1,2,3,4,5,6,7,8,9]  # 9 subjects
     sfreq = 250    # Sampling frequency - 250Hz
-    '''
-    Hyperparameter tuning
-    '''
-    #Hyperparameter_tuning for csp, and expanding window parameters using the static model, as we have limited compute
-    print("\n\n Hyperparameter tuning (1): csp and window parameters \n\n")
     
-    #parameters_list = create_parameterslist(sfreq)
-    #best_params_sliding, _ = hyperparameter_tuning(parameters_list, subjects) #tuned on accuracy as we dont have pred time for itr
+    best_params_sliding, best_itr_patience, best_confidence_type = tune_lda_sliding()
     print("\n\n Hyperparameter tuning (1): completed \n\n")
-    csp_components =  8 #best_params_sliding['csp_components']
-    w_length =  185 #best_params_sliding['w_length']
-    w_step =  25 #best_params_sliding['w_step']
+    csp_components =  8#best_params_sliding['csp_components']
+    w_length =  225#best_params_sliding['w_length']
+    w_step = 50#best_params_sliding['w_step']
+    solver = 'poly'#best_params_sliding['solver']
+    shrinkage = 'auto' #best_params_sliding['shrinkage']
+    best_itr_patience = 4
+    best_confidence_type = 'neg_norm_shannon'
 
     w_start= np.arange(0, epochs_info(length= True) -  w_length,  w_step)  # epochs_info(length= True) = 1001
-
-    confidence_types = ['highest_prob','difference_two_highest', 'neg_norm_shannon']
     #Patience values -> 1 - len(nr of windows)
     patience_values = np.arange(1, len(w_start)) #need to control this by itr 
     # Threshold values -> [0.001, 0.01, 0.1 - 0.9, 0.99, 0.999]
     threshold_values = np.array(np.arange(0.1, 1, 0.1)) #Have thresholds that are super close to 0 and super close 1, that might expand the plot
     threshold_values =np.concatenate(([0.001, 0.01], threshold_values))
     threshold_values = np.append(threshold_values, [0.99, 0.999])
-    #threshold_values = [0.1, 0.9]
-    #Find optimal confidence type and patience from the sliding dynamic model using itr
-    print("\n\n Hyperparameter tuning (2): patience and confidence type \n\n")
-
-    print(f"Chosen_hyperparameter_values: \n - csp: {csp_components},\n - window length: {w_length}, \n -w_step: {w_step}, \n -len patience: {len(patience_values)}")
-    # over confidence values
-
-    #We tune with respect to ITR, as we not only want to focus on accuracy but also prediction time.
-    '''for j, confidence_type in enumerate(confidence_types):
-        best_itr_tune = 0
-        best_itr_threshold = 0
-        best_itr_patience = 0
-        best_confidence_type = None
-        # over threshold values
-        for n, threshold in enumerate(threshold_values):
-            # over patience values
-            for m, patience in enumerate(patience_values):
-                print("\n")
-                print(f" Confidence type: {j+1}/{len(confidence_types)}, Threshold:{n+1}/{len(threshold_values)},  Patience: {m+1}/{len(patience_values)}")
-                print("\n")
-                #given the varaibles, provide the average accuracy and prediction times (early prediction)
-                accuracy, kappa, prediction_time, _, _, _, _, _ , _, _, _, _, _ = run_sliding_classification_dynamic(subjects, threshold, patience, confidence_type, w_length, w_step, sfreq, csp_components)
-                best_itr_tune, best_itr_patience, best_itr_threshold, best_confidence_type = calculate_best_itr_dyn_tune(best_itr_tune, best_itr_patience, best_itr_threshold, best_confidence_type, accuracy, prediction_time, patience, threshold, confidence_type)
-    '''
-    best_itr_patience = 3
-    best_confidence_type = 'neg_norm_shannon'
-    print("\n\n Hyperparameter tuning (2): completed\n\n")
-    print(f"chosen patience: {best_itr_patience}, chosen confidence_type: {best_confidence_type}")
+   
 
     '''
     Evaluation
@@ -582,7 +426,7 @@ def main_lda_sliding():
     for n, threshold in enumerate(threshold_values):
         print(f"Threshold:{n+1}/{len(threshold_values)}")
         #dynamic model evaluation
-        accuracy, kappa, prediction_time, itr, cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, subjects_itrs_dyn, mean_scores_across_subjects, mean_kappa_across_subjects,mean_prediction_time_across_subjects, mean_itr_across_subjects = run_sliding_classification_dynamic(subjects, threshold, best_itr_patience, best_confidence_type, w_length, w_step, sfreq, csp_components)
+        accuracy, kappa, prediction_time, itr, cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, subjects_itrs_dyn, mean_scores_across_subjects, mean_kappa_across_subjects,mean_prediction_time_across_subjects, mean_itr_across_subjects = run_sliding_classification_dynamic(subjects, threshold, best_itr_patience, best_confidence_type, w_length, w_step, sfreq, csp_components, solver, shrinkage)
         best_itr, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_subjects_itrs_dyn, best_cm_dyn, _= calculate_best_itr_dyn(best_itr, accuracy, prediction_time, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_subjects_itrs_dyn, best_cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, subjects_itrs_dyn, cm_dyn)
         accuracy_dynamic.append(accuracy)
         kappa_dynamic.append(kappa)
@@ -606,7 +450,7 @@ def main_lda_sliding():
     cm_stat = None
      
 
-    subjects_accuracies_stat, scores_across_subjects_stat, subjects_kappa_stat, kappa_across_subjects_stat, subjects_itrs_stat, itrs_across_subjects_stat,  accuracy, kappa, itr, cm_stat, csp_stat= run_sliding_classification_static(subjects, w_length, w_step, csp_components, prediction_time_dynamic)
+    subjects_accuracies_stat, scores_across_subjects_stat, subjects_kappa_stat, kappa_across_subjects_stat, subjects_itrs_stat, itrs_across_subjects_stat,  accuracy, kappa, itr, cm_stat, csp_stat= run_sliding_classification_static(subjects, w_length, w_step, csp_components, prediction_time_dynamic, solver, shrinkage)
     #accuracy and kappa are not single numbers here
     accuracy_static = accuracy
     kappa_static = kappa
@@ -625,9 +469,9 @@ def main_lda_sliding():
     #Plotting and storing data
     '''
     #Write the optimal parameters
-    print(f"Chosen parameters: \n - csp: {csp_components}, \n - w_length: {w_length},\n - w_step:  {w_step}, \n - confidence_type: {best_confidence_type}, \n - patience: {best_itr_patience} out of {patience_values}")
+    print(f"Chosen parameters: \n - csp: {csp_components}, \n - w_length: {w_length},\n - w_step:  {w_step}, \n - solver : {solver}, \n - shrinkage: {shrinkage}, \n - confidence_type: {best_confidence_type}, \n - patience: {best_itr_patience} out of {patience_values}")
     h = open(project_root + "/reports/figures/cumulative/LDA/dynamicVSstatic/sliding_model_optimal_parameters.txt", "w")
-    h.write(f"Chosen parameters: \n - csp: {csp_components}, \n - w_length: {w_length},\n - w_step:  {w_step}, \n - confidence_type: {best_confidence_type}, \n - patience: {best_itr_patience} out of {patience_values}")
+    h.write(f"Chosen parameters: \n - csp: {csp_components}, \n - w_length: {w_length},\n - w_step:  {w_step}, \n - solver : {solver}, \n - shrinkage: {shrinkage}, \n - confidence_type: {best_confidence_type}, \n - patience: {best_itr_patience} out of {patience_values}")
     h.close()
 
     #write per subject accuracies - dynamic
@@ -718,7 +562,7 @@ def main_lda_sliding():
     plt.axvline(onset, linestyle="--", color="r", label="Onset")
     plt.axvline(offset, linestyle="--", color="b", label="Offset")
     plt.errorbar(prediction_time_dynamic, accuracy_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_accuracy_dynamic, label = "Dynamic model", fmt='o', color='blue', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
-    plt.errorbar(prediction_time_dynamic, accuracy_static, xerr = sem_pred_time_dynamic, yerr= sem_accuracy_stat, label = "Static model", fmt='s', color='green', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
+    plt.errorbar(prediction_time_dynamic, accuracy_static, yerr= sem_accuracy_stat, label = "Static model", fmt='s', color='green', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
     plt.title("Sliding LDA models: Accuracy vs Pred time")
     plt.axhline(0.25, label= "Chance")
     plt.legend()
@@ -739,9 +583,10 @@ def main_lda_sliding():
     plt.axvline(onset, linestyle="--", color="r", label="Onset")
     plt.axvline(offset, linestyle="--", color="b", label="Offset")
     plt.errorbar(prediction_time_dynamic, kappa_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_kappa_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
-    plt.errorbar(prediction_time_dynamic, kappa_static, xerr = sem_pred_time_dynamic, yerr= sem_kappa_stat, label = "Static model", fmt='s', color='green', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
+    plt.errorbar(prediction_time_dynamic, kappa_static, yerr= sem_kappa_stat, label = "Static model", fmt='s', color='green', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
     plt.title("Sliding LDA models: Kappa vs Pred time")
     plt.legend()
+    plt.ylim(bottom=0)
     plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamicVSstatic/SlidingKappa.png')
     plt.show()
 
@@ -759,9 +604,10 @@ def main_lda_sliding():
     plt.axvline(onset, linestyle="--", color="r", label="Onset")
     plt.axvline(offset, linestyle="--", color="b", label="Offset")
     plt.errorbar(prediction_time_dynamic, itr_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_itr_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
-    plt.errorbar(prediction_time_dynamic, itr_static, xerr = sem_pred_time_dynamic, yerr= sem_itr_stat, label = "Static model", fmt='s', color='green', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
+    plt.errorbar(prediction_time_dynamic, itr_static, yerr= sem_itr_stat, label = "Static model", fmt='s', color='green', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
     plt.title("Sliding LDA models: Information Transfer rate vs Pred time")
     plt.legend()
+    plt.ylim(bottom=0)
     plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamicVSstatic/SlidingItr.png')
     plt.show()
 

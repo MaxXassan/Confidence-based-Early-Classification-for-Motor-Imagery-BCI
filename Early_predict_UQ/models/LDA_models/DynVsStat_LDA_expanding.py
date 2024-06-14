@@ -25,6 +25,7 @@ print("ROOT:", project_root)
 VALID_CONFIDENCE_TYPES = {'highest_prob', 'difference_two_highest', 'neg_norm_shannon'}
 #Static hyperparameter tuning
 from Early_predict_UQ.data.make_dataset import make_data
+from Tune_LDA_expanding import tune_lda_expanding
 #Set confidence value given probabilities and method
 def find_confidence(confidence_type, probabilities):
     probabilities = probabilities.flatten()
@@ -79,7 +80,7 @@ def early_pred(probabilities, predict, numTimesThresholdCrossed, patience, confi
     return predict, numTimesThresholdCrossed, previous_class_index
 
 #Given sliding window and stopping values, we average the accuracy and prediction time for the model
-def run_expanding_classification_dynamic(subjects, threshold, patience, confidence_type, initial_window_length, expansion_rate, sfreq, csp_components):
+def run_expanding_classification_dynamic(subjects, threshold, patience, confidence_type, initial_window_length, expansion_rate, sfreq, csp_components, solver, shrinkage, n_components, store_covariance, tol):
     scores_across_subjects = []
     kappa_across_subjects = []
     prediction_time_across_subjects = []
@@ -110,8 +111,11 @@ def run_expanding_classification_dynamic(subjects, threshold, patience, confiden
         test_indexes = [i for i, epoch in enumerate(epochs) if epochs[i].metadata['session'].iloc[0] == '1test']
         test_data = epochs_data[test_indexes]
         test_labels = labels[test_indexes]
-
-        lda = LinearDiscriminantAnalysis()
+        #if svd vs if not ; tol shrinkage store cov
+        if solver == 'svd':
+            lda = LinearDiscriminantAnalysis(solver = solver, tol = tol, n_components = n_components)
+        else:
+            lda = LinearDiscriminantAnalysis(solver = solver, shrinkage = shrinkage, n_components = n_components)
         csp = CSP(n_components=csp_components, reg=None, log=True, norm_trace=False)
         current_cv = 0
 
@@ -202,80 +206,7 @@ def run_expanding_classification_dynamic(subjects, threshold, patience, confiden
     cm = np.divide(cm, number_cm)
     return accuracy, kappa, prediction_time, itr, cm, subjects_accuracies, subjects_prediction_times, subjects_kappa, subjects_itrs, mean_scores_across_subjects, mean_kappa_across_subjects, mean_prediction_time_across_subjects, mean_itr_across_subjects
 
-#Expanding window - classification - tuning using kfold cross validation
-   ##calculate kappa and accuracy at each window step
-def run_expanding_classification_tuning_static(subjects, initial_window_length, expansion_rate, csp_components):
-    scores_across_subjects = []
-    kappa_across_subjects = []
-
-    subjects_accuracies =[]
-    subjects_kappa = []
-    current_person = 0
-    for person in subjects:
-        current_person += 1
-        print("Person %d" % (person))
-        subject= [person]
-        epochs, labels = make_data(subject)
-
-        #get the training set - first session of the data for each subject
-        train_indexes = [i for i, epoch in enumerate(epochs) if epochs[i].metadata['session'].iloc[0] == '0train']
-        epochs_data = epochs.get_data(copy = False)
-        train_data = epochs_data[train_indexes]
-        train_labels = labels[train_indexes]
-
-
-        cv = KFold(n_splits=10, shuffle = True, random_state=42)
-
-        scores_cv_splits = []
-        kappa_cv_splits  = []
-
-        lda = LinearDiscriminantAnalysis()
-        csp = CSP(n_components= csp_components, reg=None, log=True, norm_trace=False)
-        current_cv = 0 
-        for train_idx, test_idx in cv.split(train_data):
-            current_cv += 1
-            y_train, y_test = train_labels[train_idx], train_labels[test_idx]
-            X_train = csp.fit_transform(train_data[train_idx], y_train)
-            lda.fit(X_train, y_train)
-            w_start = np.arange(0, train_data.shape[2] - initial_window_length, expansion_rate) 
-            scores_across_epochs = []
-            kappa_across_epochs = []
-            for n, window_start in enumerate(w_start):
-                window_length = initial_window_length + n * expansion_rate
-                X_test_window = csp.transform(train_data[test_idx][:, :,  w_start[0]:window_length])
-                #accuracy
-                score = lda.score(X_test_window, y_test)
-                scores_across_epochs.append(score)
-
-                #kappa
-                kappa = cohen_kappa_score(lda.predict(X_test_window), y_test) 
-                kappa_across_epochs.append(kappa)
-            if current_cv == 1:
-                scores_cv_splits = np.array(scores_across_epochs)
-                kappa_cv_splits = np.array(kappa_across_epochs)
-            else:
-                scores_cv_splits = np.vstack((scores_cv_splits,np.array(scores_across_epochs)))
-                kappa_cv_splits = np.vstack((kappa_cv_splits,np.array(kappa_across_epochs)))
-        mean_scores_across_cv = np.mean(scores_cv_splits, axis=0)
-        mean_kappa_across_cv = np.mean(kappa_cv_splits, axis=0)
-        if current_person == 1:
-            scores_across_subjects  = np.array(mean_scores_across_cv)
-            kappa_across_subjects  = np.array(mean_kappa_across_cv)
-        else:
-            scores_across_subjects = np.vstack((scores_across_subjects,np.array(mean_scores_across_cv)))
-            kappa_across_subjects = np.vstack((kappa_across_subjects,np.array(mean_kappa_across_cv)))
-
-        subjects_accuracies.append(np.mean(mean_scores_across_cv))
-        subjects_kappa.append(np.mean(mean_kappa_across_cv))
-
-    mean_scores_across_subjects = np.mean(scores_across_subjects, axis=0)
-    mean_kappa_across_subjects = np.mean(kappa_across_subjects, axis=0)
-    accuracy = mean_scores_across_subjects
-    kappa = mean_kappa_across_subjects
-
-    return subjects_accuracies, scores_across_subjects, subjects_kappa, kappa_across_subjects, accuracy, kappa
-
-def run_expanding_classification_static(subjects, initial_window_length, expansion_rate, csp_components, pred_times):
+def run_expanding_classification_static(subjects, initial_window_length, expansion_rate, csp_components, pred_times, solver, shrinkage, n_components, tol):
     scores_across_subjects = []
     kappa_across_subjects = []
     itrs_across_subjects = []
@@ -304,8 +235,11 @@ def run_expanding_classification_static(subjects, initial_window_length, expansi
         test_indexes = [i for i, epoch in enumerate(epochs) if epochs[i].metadata['session'].iloc[0] == '1test']
         test_data = epochs_data[test_indexes]
         test_labels = labels[test_indexes]
-
-        lda = LinearDiscriminantAnalysis()
+        #if svd vs if not ; tol shrinkage store cov
+        if solver == 'svd':
+            lda = LinearDiscriminantAnalysis(solver = solver, tol = tol, n_components = n_components)
+        else:
+            lda = LinearDiscriminantAnalysis(solver = solver, shrinkage = shrinkage, n_components = n_components)
         csp = CSP(n_components=csp_components, reg=None, log=True, norm_trace=False)
 
         # Fit CSP on training data
@@ -364,52 +298,6 @@ def run_expanding_classification_static(subjects, initial_window_length, expansi
     # confusion matrix
     cm = np.divide(cm, number_cm)
     return subjects_accuracies, scores_across_subjects, subjects_kappa, kappa_across_subjects, subjects_itrs, itrs_across_subjects, accuracy, kappa, itr, cm, csp
-'''Create parameter search space
-    - Sample n_iter sets of parameters - set to 60 iterations. 
-    - 60 iterations lets us reach the 95% confidence interval that we have found a set of parameters with "good values",
-      if the good space covers only 5% of the search space.
-    - 1-0.95^(60) = 0.953 > 0.95
-    (Random Search for Hyper-Parameter Optimization - Bergstra & Bengio (2012))
-'''
-
-def create_parameterslist(sfreq):
-    rng = np.random.RandomState(42)
-
-    #max intial_length and epxansion rate to be 1/4 of the trial during the MI task, or 1 seconds
-    initial_window_length = np.round(rng.uniform(0.1, 1, 10), 1) 
-    expansion_rate = np.round(rng.uniform(0.1, 0.5, 10), 1)
-
-    parameters = {  
-    # 1, 2 filters for each class, as we have 4 classes.
-    'csp_components': [4,8], # more than 8 was reading into noise - occipital lobe pattern
-    'initial_window_length': np.round(sfreq * initial_window_length).astype(int), 
-    'expansion_rate':  np.round(sfreq * expansion_rate).astype(int)
-    }
-
-    #Random search parameters - n_tier sets of parameter values
-    parameters_list = list(ParameterSampler(parameters, n_iter= 60, random_state=rng))
-    return parameters_list
-
-#Random search and return the best parameter values and its accuracy
-def hyperparameter_tuning (parameters_list, subjects):
-    mean_accuracy = 0
-    best_accuracy = 0
-    for n, param_set in enumerate(parameters_list):
-        csp_components = param_set['csp_components']
-        initial_window_length = param_set['initial_window_length'] 
-        expansion_rate =  param_set['expansion_rate']
-
-        _, _, _, _, accuracy, _ = run_expanding_classification_tuning_static(subjects, initial_window_length, expansion_rate, csp_components)
-        #only optimized for best accuracy here, maybe kappa too?
-        mean_accuracy = np.mean(accuracy)
-
-        print(f"Iteration {n+1}/{len(parameters_list)}: Mean accuracy for parameters {param_set} is {mean_accuracy}")
-        #using accuracy as itr not possible due to lack of prediction time
-        if mean_accuracy > best_accuracy:
-            best_accuracy = mean_accuracy
-            best_params_expanding = param_set
-
-    return best_params_expanding, best_accuracy
 
 #Access general epoch information
 def epochs_info(labels=False, tmin=False, tmax = False, length=False):
@@ -498,52 +386,25 @@ def plot_confusion_matrix(cm_stat, cm_dyn):
 def main_lda_expanding():
     subjects = [1,2,3,4,5,6,7,8,9]  # 9 subjects
     sfreq = 250    # Sampling frequency - 250Hz
-    '''
-    Hyperparameter tuning
-    '''
-    #Hyperparameter_tuning for csp, and expanding window parameters using the static model, as we have limited compute
-    print("\n\n Hyperparameter tuning (1): csp and window parameters \n\n")
-    #parameters_list = create_parameterslist(sfreq)
-    #best_params_expanding, _ = hyperparameter_tuning(parameters_list, subjects) #tuned on accuracy as we dont have pred time for itr
+  
+    best_params_expanding, best_itr_patience, best_confidence_type = tune_lda_expanding()
     print("\n\n Hyperparameter tuning (1): completed \n\n")
     
-    csp_components = 8 #best_params_expanding['csp_components']
-    initial_window_length = 250 #best_params_expanding['initial_window_length']
-    expansion_rate = 50 #best_params_expanding['expansion_rate']
+    csp_components = best_params_expanding['csp_components']
+    initial_window_length = best_params_expanding['initial_window_length']
+    expansion_rate = best_params_expanding['expansion_rate']
+    solver = best_params_expanding['solver']
+    n_components = best_params_expanding['n_components']
+    tol = best_params_expanding['tol']
+    shrinkage = best_params_expanding['shrinkage']
 
     w_start= np.arange(0, epochs_info(length= True) - initial_window_length, expansion_rate) 
-    confidence_types = ['highest_prob','difference_two_highest', 'neg_norm_shannon' ]
     # Patience values = 1 - len(nr of windows)
     patience_values = np.arange(1, len(w_start)) #need to control this by itr 
     # Threshold values -> [0.001, 0.01, 0.1 - 0.9, 0.99, 0.999]
     threshold_values = np.array(np.arange(0.1, 1, 0.1)) #Have thresholds that are super close to 0 and super close 1, that might expand the plot
     threshold_values =np.concatenate(([0.001, 0.01], threshold_values))
     threshold_values = np.append(threshold_values, [0.99, 0.999])
-    #Find optimal confidence type and patience from the expanding dynamic model using itr
-    print("\n\n Hyperparameter tuning (2): patience and confidence type \n\n")
-
-    #We tune with respect to ITR, as we not only want to focus on accuracy but also prediction time.
-    '''for j, confidence_type in enumerate(confidence_types):
-        # array to hold the average accuracy and prediction times with size len(confidence_type) x len(thre)
-        best_itr_tune = 0
-        best_itr_threshold = 0
-        best_itr_patience = 0
-        best_confidence_type = None
-        # over threshold values
-        for n, threshold in enumerate(threshold_values):
-            # over patience values
-            for m, patience in enumerate(patience_values):
-                print("\n")
-                print(f" Confidence type: {j+1}/{len(confidence_types)}, Threshold:{n+1}/{len(threshold_values)},  Patience: {m+1}/{len(patience_values)}")
-                print("\n")
-                #given the varaibles, provide the average accuracy and prediction times (early prediction)
-                accuracy, kappa, prediction_time, _, _, _, _, _ , _, _, _, _, _ = run_expanding_classification_dynamic(subjects, threshold, patience, confidence_type, initial_window_length, expansion_rate, sfreq, csp_components)
-                best_itr_tune, best_itr_patience, best_itr_threshold, best_confidence_type = calculate_best_itr_dyn_tune(best_itr_tune, best_itr_patience, best_itr_threshold, best_confidence_type, accuracy, prediction_time, patience, threshold, confidence_type)
-    '''
-    best_itr_patience = 3
-    best_confidence_type = 'neg_norm_shannon'
-    print("\n\n Hyperparameter tuning (2): completed\n\n")
-    print(f"chosen patience: {best_itr_patience}, chosen confidence_type: {best_confidence_type}")
 
     '''
     Evaluation
@@ -569,7 +430,7 @@ def main_lda_expanding():
     for n, threshold in enumerate(threshold_values):
         print(f"Threshold:{n+1}/{len(threshold_values)}")
         #dynamic model evaluation
-        accuracy, kappa, prediction_time, itr, cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, subjects_itrs_dyn, mean_scores_across_subjects, mean_kappa_across_subjects,mean_prediction_time_across_subjects, mean_itr_across_subjects = run_expanding_classification_dynamic(subjects, threshold, best_itr_patience, best_confidence_type, initial_window_length, expansion_rate, sfreq, csp_components)
+        accuracy, kappa, prediction_time, itr, cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, subjects_itrs_dyn, mean_scores_across_subjects, mean_kappa_across_subjects,mean_prediction_time_across_subjects, mean_itr_across_subjects = run_expanding_classification_dynamic(subjects, threshold, best_itr_patience, best_confidence_type, initial_window_length, expansion_rate, sfreq, csp_components, solver, shrinkage, n_components, tol)
         best_itr, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_subjects_itrs_dyn, best_cm_dyn, _= calculate_best_itr_dyn(best_itr, accuracy, prediction_time, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_subjects_itrs_dyn, best_cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, subjects_itrs_dyn, cm_dyn)
         accuracy_dynamic.append(accuracy)
         kappa_dynamic.append(kappa)
@@ -592,7 +453,7 @@ def main_lda_expanding():
     kappa = []
     cm_stat = None
 
-    subjects_accuracies_stat, scores_across_subjects_stat, subjects_kappa_stat, kappa_across_subjects_stat, subjects_itrs_stat, itrs_across_subjects_stat,  accuracy, kappa, itr, cm_stat, csp_stat= run_expanding_classification_static(subjects, initial_window_length, expansion_rate, csp_components, prediction_time_dynamic)
+    subjects_accuracies_stat, scores_across_subjects_stat, subjects_kappa_stat, kappa_across_subjects_stat, subjects_itrs_stat, itrs_across_subjects_stat,  accuracy, kappa, itr, cm_stat, csp_stat= run_expanding_classification_static(subjects, initial_window_length, expansion_rate, csp_components, prediction_time_dynamic, solver, shrinkage)
     #accuracy and kappa are not single numbers here
     accuracy_static = accuracy
     kappa_static = kappa
@@ -702,7 +563,7 @@ def main_lda_expanding():
     plt.axvline(onset, linestyle="--", color="r", label="Onset")
     plt.axvline(offset, linestyle="--", color="b", label="Offset")
     plt.errorbar(prediction_time_dynamic, accuracy_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_accuracy_dynamic, label = "Dynamic model", fmt='o', color='blue', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
-    plt.errorbar(prediction_time_dynamic, accuracy_static, xerr = sem_pred_time_dynamic, yerr= sem_accuracy_stat, label = "Static model", fmt='s', color='green', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
+    plt.errorbar(prediction_time_dynamic, accuracy_static, yerr= sem_accuracy_stat, label = "Static model", fmt='s', color='green', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
     plt.title("Expanding LDA models: Accuracy vs Pred time")
     plt.axhline(0.25, label= "Chance")
     plt.legend()
@@ -723,7 +584,7 @@ def main_lda_expanding():
     plt.axvline(onset, linestyle="--", color="r", label="Onset")
     plt.axvline(offset, linestyle="--", color="b", label="Offset")
     plt.errorbar(prediction_time_dynamic, kappa_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_kappa_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
-    plt.errorbar(prediction_time_dynamic, kappa_static, xerr = sem_pred_time_dynamic, yerr= sem_kappa_stat, label = "Static model", fmt='s', color='green', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
+    plt.errorbar(prediction_time_dynamic, kappa_static, yerr= sem_kappa_stat, label = "Static model", fmt='s', color='green', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
     plt.title("Expanding LDA models: Kappa vs Pred time")
     plt.legend()
     plt.ylim(bottom=0)
@@ -744,7 +605,7 @@ def main_lda_expanding():
     plt.axvline(onset, linestyle="--", color="r", label="Onset")
     plt.axvline(offset, linestyle="--", color="b", label="Offset")
     plt.errorbar(prediction_time_dynamic, itr_dynamic, xerr = sem_pred_time_dynamic,yerr= sem_itr_dynamic , label = "Dynamic model", fmt='o', color='blue', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
-    plt.errorbar(prediction_time_dynamic, itr_static, xerr = sem_pred_time_dynamic, yerr= sem_itr_stat, label = "Static model", fmt='s', color='green', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
+    plt.errorbar(prediction_time_dynamic, itr_static, yerr= sem_itr_stat, label = "Static model", fmt='s', color='green', ecolor='black', linestyle='-', linewidth=0.9, elinewidth=0.65, capsize=0.65)
     plt.title("Expanding LDA models: Information Transfer rate vs Pred time")
     plt.legend()
     plt.ylim(bottom=0)
