@@ -445,7 +445,7 @@ def tune_lda_sliding():
     shrinkage = best_params_sliding['shrinkage']
     n_components = best_params_sliding['n_components']
     tol = best_params_sliding['tol']
-    print(f"Chosen_hyperparameter_values: \n - csp: {csp_components},\n - window length: {w_length}, \n -w_step: {w_step}, \n - solver : {solver}, \n - shrinkage: {shrinkage},\n - n_components: {n_components}, \n - tol: {tol}, \n -len patience: {len(patience_values)}")
+    print(f"Chosen_hyperparameter_values: \n - csp: {csp_components},\n - window length: {w_length}, \n -w_step: {w_step}, \n - solver : {solver}, \n - shrinkage: {shrinkage},\n - n_components: {n_components}, \n - tol: {tol}")
     print("\n\n Hyperparameter tuning (2): patience and confidence type \n\n")
     w_start= np.arange(0, epochs_info(length= True) -  w_length,  w_step)  # epochs_info(length= True) = 1001
 

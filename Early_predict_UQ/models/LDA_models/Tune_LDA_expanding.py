@@ -434,7 +434,7 @@ def tune_lda_expanding():
     tol = best_params_expanding['tol']
     shrinkage = best_params_expanding['shrinkage']
 
-    print(f"Chosen_hyperparameter_values: \n - csp: {csp_components},\n - initial_window_length : { initial_window_length }, \n -expansion_rate: {expansion_rate}, \n - solver : {solver}, \n - shrinkage: {shrinkage},\n - n_components: {n_components}, \n - tol: {tol}, \n -len patience: {len(patience_values)}")
+    print(f"Chosen_hyperparameter_values: \n - csp: {csp_components},\n - initial_window_length : { initial_window_length }, \n -expansion_rate: {expansion_rate}, \n - solver : {solver}, \n - shrinkage: {shrinkage},\n - n_components: {n_components}, \n - tol: {tol}")
       
     
 
