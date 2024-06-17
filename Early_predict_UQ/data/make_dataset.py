@@ -1,6 +1,7 @@
 from moabb.datasets import BNCI2014_001
 from moabb.paradigms import MotorImagery
 
+
 '''
 2 sessions, 
     - 6 runs in each session, 
@@ -17,12 +18,10 @@ from moabb.paradigms import MotorImagery
 # Given a subject list, return the preprocessed and epoched data
 def make_data(subject_list):
     dataset = BNCI2014_001()
-    paradigm = MotorImagery()
-    epochs, labels, _ = paradigm.get_data( 
-        dataset=dataset, subjects=subject_list, return_epochs=True
-    )
+    paradigm = MotorImagery(fmin=7, fmax=30) # Bandpass filter between to enhance mu and beta frequencies
 
-    # Bandpass filter between to enhance mu and beta frequencies
-    epochs.filter(l_freq=7, h_freq=30)
-
+    epochs, labels, meta = paradigm.get_data( 
+            dataset=dataset, subjects=subject_list, return_epochs=True
+        )
+    
     return epochs, labels

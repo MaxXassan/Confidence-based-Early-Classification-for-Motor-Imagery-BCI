@@ -1,0 +1,10 @@
+Classification accuracy - Static Model: 0.5576626305792972
+Subject 9: Accuracy: 0.7313034188034189 
+Subject 1: Accuracy: 0.6856303418803419 
+Subject 3: Accuracy: 0.6631944444444445 
+Subject 8: Accuracy: 0.6439636752136751 
+Subject 7: Accuracy: 0.547008547008547 
+Subject 4: Accuracy: 0.5387286324786325 
+Subject 6: Accuracy: 0.43803418803418803 
+Subject 2: Accuracy: 0.43028846153846156 
+Subject 5: Accuracy: 0.3408119658119658 

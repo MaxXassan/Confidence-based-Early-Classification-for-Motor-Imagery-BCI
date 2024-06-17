@@ -1,2 +1,3 @@
-# UQ_Early_prediction_MI_BCI
+# Confidence-based early stopping in motor imagery BCI
  
+# Run Main.py to evaluate the models

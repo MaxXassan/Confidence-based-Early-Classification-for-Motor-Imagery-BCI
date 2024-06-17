@@ -1,0 +1,10 @@
+Classification accuracy - Dynamic Model: 0.5536562203228871
+Subject 9: Accuracy: 0.6840277777777778 
+Subject 3: Accuracy: 0.6076388888888888 
+Subject 1: Accuracy: 0.5833333333333334 
+Subject 8: Accuracy: 0.5659722222222222 
+Subject 4: Accuracy: 0.4965277777777778 
+Subject 7: Accuracy: 0.4930555555555556 
+Subject 6: Accuracy: 0.4340277777777778 
+Subject 2: Accuracy: 0.3854166666666667 
+Subject 5: Accuracy: 0.3611111111111111 
