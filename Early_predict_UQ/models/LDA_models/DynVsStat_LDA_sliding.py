@@ -100,7 +100,6 @@ def run_sliding_classification_dynamic(subjects, threshold, patience, confidence
         epochs, labels = make_data(subject)
         #labels = epochs.events[:, -1] - 4
         epochs_data = epochs.get_data(copy=False)
-
         #get the training set - first session of the data
         train_indexes = [i for i, epoch in enumerate(epochs) if epochs[i].metadata['session'].iloc[0] == '0train']
         train_data = epochs_data[train_indexes]
@@ -206,7 +205,6 @@ def run_sliding_classification_dynamic(subjects, threshold, patience, confidence
 
 #Sldiding window - classification - tuning using kfold cross validation
    ##calculate kappa and accuracy at each window step
- 
 def run_sliding_classification_static(subjects, w_length, w_step, csp_components, pred_times, solver, shrinkage, n_components, tol):
     scores_across_subjects = []
     kappa_across_subjects = []
@@ -225,6 +223,7 @@ def run_sliding_classification_static(subjects, w_length, w_step, csp_components
         subject= [person]
         epochs, labels = make_data(subject)
         epochs_data = epochs.get_data(copy=False)
+
         
         #get the training set - first session of the data
         train_indexes = [i for i, epoch in enumerate(epochs) if epochs[i].metadata['session'].iloc[0] == '0train']
@@ -270,7 +269,7 @@ def run_sliding_classification_static(subjects, w_length, w_step, csp_components
             cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
             number_cm +=1
             #itr 
-            _, _, _, _, _, _, itr = calculate_best_itr_dyn(best_itr = 0, accuracy = score, prediction_time = pred_times[n], best_subjects_accuracies_dyn= None, best_subjects_prediction_times_dyn= None, best_subjects_kappa_dyn= None, best_subjects_itrs_dyn= None, best_cm_dyn= None, subjects_accuracies_dyn= None, subjects_prediction_times_dyn= None, subjects_kappa_dyn= None, subjects_itrs_dyn = None, cm_dyn = None)
+            _, _, _, _, _, _, itr = calculate_best_itr_dyn(best_itr = 0, accuracy = score, prediction_time = n, best_subjects_accuracies_dyn= None, best_subjects_prediction_times_dyn= None, best_subjects_kappa_dyn= None, best_subjects_itrs_dyn= None, best_cm_dyn= None, subjects_accuracies_dyn= None, subjects_prediction_times_dyn= None, subjects_kappa_dyn= None, subjects_itrs_dyn = None, cm_dyn = None)
             itrs_across_epochs.append(itr)
 
         if current_person == 1:
@@ -365,7 +364,7 @@ def plot_confusion_matrix(cm_stat, cm_dyn):
     plt.title(f"Confusion Matrix: LDA - Dynamic - Sliding model", fontsize=12)
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
-    s = sns.heatmap(cm_dyn, annot=True, fmt=".1f", cmap='magma', xticklabels=['left_hand', 'right_hand', 'tongue', 'feet'], yticklabels=['left_hand', 'right_hand', 'tongue', 'feet'])
+    s = sns.heatmap(cm_dyn, annot=True, fmt=".1f", cmap='magma', xticklabels=['Left hand', 'Right hand', 'Tongue', 'Feet'], yticklabels=['Left hand', 'Right hand', 'Tongue', 'Feet'])
     s.set(xlabel='Predicted Label', ylabel='True Label')
     plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamicVSstatic/Sliding_dynamic_ConfusionMatrix.png')
 
@@ -374,7 +373,7 @@ def plot_confusion_matrix(cm_stat, cm_dyn):
     plt.title(f"Confusion Matrix: LDA - Static - Sliding model", fontsize=12)
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
-    s = sns.heatmap(cm_stat, annot=True, fmt=".1f", cmap='magma', xticklabels=['left_hand', 'right_hand', 'tongue', 'feet'], yticklabels=['left_hand', 'right_hand', 'tongue', 'feet'])
+    s = sns.heatmap(cm_stat, annot=True, fmt=".1f", cmap='magma', xticklabels=['Left hand', 'Right hand', 'Tongue', 'Feet'], yticklabels=['Left hand', 'Right hand', 'Tongue', 'Feet'])
     s.set(xlabel='Predicted Label', ylabel='True Label')
 
     plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamicVSstatic/Sliding_static_ConfusionMatrix.png')  
@@ -384,15 +383,19 @@ def main_lda_sliding():
     subjects = [1,2,3,4,5,6,7,8,9]  # 9 subjects
     sfreq = 250    # Sampling frequency - 250Hz
     
-    best_params_sliding, best_itr_patience, best_confidence_type = tune_lda_sliding()
-    print("\n\n Hyperparameter tuning (1): completed \n\n")
-    csp_components =  8#best_params_sliding['csp_components']
-    w_length =  225#best_params_sliding['w_length']
-    w_step = 50#best_params_sliding['w_step']
-    solver = 'poly'#best_params_sliding['solver']
-    shrinkage = 'auto' #best_params_sliding['shrinkage']
-    best_itr_patience = 4
+    #best_params_sliding, best_itr_patience, best_confidence_type = tune_lda_sliding()
+    #print("\n\n Hyperparameter tuning (1): completed \n\n")
+    best_itr_patience = 3
     best_confidence_type = 'neg_norm_shannon'
+
+    csp_components =  8#best_params_sliding['csp_components']
+    w_length =  220#best_params_sliding['w_length']
+    w_step = 50#best_params_sliding['w_step']
+    solver = 'lsqr'#best_params_sliding['solver']
+    shrinkage = 0.46 #best_params_sliding['shrinkage']
+    n_components = 1#best_params_sliding['n_components']
+    tol = None #best_params_sliding['tol']
+
 
     w_start= np.arange(0, epochs_info(length= True) -  w_length,  w_step)  # epochs_info(length= True) = 1001
     #Patience values -> 1 - len(nr of windows)
@@ -426,7 +429,7 @@ def main_lda_sliding():
     for n, threshold in enumerate(threshold_values):
         print(f"Threshold:{n+1}/{len(threshold_values)}")
         #dynamic model evaluation
-        accuracy, kappa, prediction_time, itr, cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, subjects_itrs_dyn, mean_scores_across_subjects, mean_kappa_across_subjects,mean_prediction_time_across_subjects, mean_itr_across_subjects = run_sliding_classification_dynamic(subjects, threshold, best_itr_patience, best_confidence_type, w_length, w_step, sfreq, csp_components, solver, shrinkage)
+        accuracy, kappa, prediction_time, itr, cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, subjects_itrs_dyn, mean_scores_across_subjects, mean_kappa_across_subjects,mean_prediction_time_across_subjects, mean_itr_across_subjects = run_sliding_classification_dynamic(subjects, threshold, best_itr_patience, best_confidence_type, w_length, w_step, sfreq, csp_components, solver, shrinkage, n_components, tol)
         best_itr, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_subjects_itrs_dyn, best_cm_dyn, _= calculate_best_itr_dyn(best_itr, accuracy, prediction_time, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_subjects_itrs_dyn, best_cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, subjects_itrs_dyn, cm_dyn)
         accuracy_dynamic.append(accuracy)
         kappa_dynamic.append(kappa)
@@ -450,7 +453,7 @@ def main_lda_sliding():
     cm_stat = None
      
 
-    subjects_accuracies_stat, scores_across_subjects_stat, subjects_kappa_stat, kappa_across_subjects_stat, subjects_itrs_stat, itrs_across_subjects_stat,  accuracy, kappa, itr, cm_stat, csp_stat= run_sliding_classification_static(subjects, w_length, w_step, csp_components, prediction_time_dynamic, solver, shrinkage)
+    subjects_accuracies_stat, scores_across_subjects_stat, subjects_kappa_stat, kappa_across_subjects_stat, subjects_itrs_stat, itrs_across_subjects_stat,  accuracy, kappa, itr, cm_stat, csp_stat= run_sliding_classification_static(subjects, w_length, w_step, csp_components, prediction_time_dynamic, solver, shrinkage, n_components, tol)
     #accuracy and kappa are not single numbers here
     accuracy_static = accuracy
     kappa_static = kappa

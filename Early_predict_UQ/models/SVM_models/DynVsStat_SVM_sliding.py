@@ -274,7 +274,7 @@ def run_sliding_classification_static(subjects, w_length, w_step, csp_components
             cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
             number_cm +=1
             #itr 
-            _, _, _, _, _, _, itr = calculate_best_itr_dyn(best_itr = 0, accuracy = score, prediction_time = pred_times[n], best_subjects_accuracies_dyn= None, best_subjects_prediction_times_dyn= None, best_subjects_kappa_dyn= None, best_subjects_itrs_dyn= None, best_cm_dyn= None, subjects_accuracies_dyn= None, subjects_prediction_times_dyn= None, subjects_kappa_dyn= None, subjects_itrs_dyn = None, cm_dyn = None)
+            _, _, _, _, _, _, itr = calculate_best_itr_dyn(best_itr = 0, accuracy = score, prediction_time = n, best_subjects_accuracies_dyn= None, best_subjects_prediction_times_dyn= None, best_subjects_kappa_dyn= None, best_subjects_itrs_dyn= None, best_cm_dyn= None, subjects_accuracies_dyn= None, subjects_prediction_times_dyn= None, subjects_kappa_dyn= None, subjects_itrs_dyn = None, cm_dyn = None)
             itrs_across_epochs.append(itr)
 
         if current_person == 1:
@@ -377,7 +377,7 @@ def plot_confusion_matrix(cm_stat, cm_dyn):
     plt.title(f"Confusion Matrix: SVM - Dynamic - Sliding model", fontsize=12)
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
-    s = sns.heatmap(cm_dyn, annot=True, fmt=".1f", cmap='magma', xticklabels=['left_hand', 'right_hand', 'tongue', 'feet'], yticklabels=['left_hand', 'right_hand', 'tongue', 'feet'])
+    s = sns.heatmap(cm_dyn, annot=True, fmt=".1f", cmap='magma', xticklabels=['Left hand', 'Right hand', 'Tongue', 'Feet'], yticklabels=['Left hand', 'Right hand', 'Tongue', 'Feet'])
     s.set(xlabel='Predicted Label', ylabel='True Label')
     plt.savefig(project_root + '/reports/figures/cumulative/SVM/dynamicVSstatic/Sliding_dynamic_ConfusionMatrix.png')
 
@@ -386,7 +386,7 @@ def plot_confusion_matrix(cm_stat, cm_dyn):
     plt.title(f"Confusion Matrix: SVM - Static - Sliding model", fontsize=12)
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
-    s = sns.heatmap(cm_stat, annot=True, fmt=".1f", cmap='magma', xticklabels=['left_hand', 'right_hand', 'tongue', 'feet'], yticklabels=['left_hand', 'right_hand', 'tongue', 'feet'])
+    s = sns.heatmap(cm_stat, annot=True, fmt=".1f", cmap='magma', xticklabels=['Left hand', 'Right hand', 'Tongue', 'Feet'], yticklabels=['Left hand', 'Right hand', 'Tongue', 'Feet'])
     s.set(xlabel='Predicted Label', ylabel='True Label')
     plt.savefig(project_root + '/reports/figures/cumulative/SVM/dynamicVSstatic/Sliding_static_ConfusionMatrix.png')    
 
@@ -394,18 +394,19 @@ def plot_confusion_matrix(cm_stat, cm_dyn):
 def main_svm_sliding():
     subjects = [1,2,3,4,5,6,7,8,9]  # 9 subjects
     sfreq = 250    # Sampling frequency - 250Hz
-    best_params_sliding, best_itr_patience, best_confidence_type = tune_svm_sliding()
-
+    #best_params_sliding, best_itr_patience, best_confidence_type = tune_svm_sliding()
+    best_itr_patience = 7
+    best_confidence_type = 'neg_norm_shannon'
 
     #best_params_sliding, best_accuracy = hyperparameter_tuning(parameters_list, subjects) #tuned on accuracy as we dont have pred time for itr
     print("\n\n Hyperparameter tuning (1): completed \n\n")
     csp_components = 8 #best_params_sliding['csp_components']
     w_length = 220 #best_params_sliding['w_length']
     w_step = 25#best_params_sliding['w_step']
-    c = 0.1 #best_params_sliding['C']
-    kernel = 'rbf' #best_params_sliding['kernel']
+    c = 10 #best_params_sliding['C']
+    kernel = 'sigmoid' #best_params_sliding['kernel']
     gamma = 0.1 #best_params_expanding['gamma']
-    degree = 2 #best_params_expanding['degree']
+    degree = None #best_params_expanding['degree']
 
     w_start= np.arange(0, epochs_info(length= True) -  w_length,  w_step) 
     confidence_types = ['highest_prob','difference_two_highest', 'neg_norm_shannon' ]
