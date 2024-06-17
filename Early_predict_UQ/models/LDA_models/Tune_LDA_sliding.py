@@ -78,6 +78,12 @@ def early_pred(probabilities, predict, numTimesThresholdCrossed, patience, confi
     return predict, numTimesThresholdCrossed, previous_class_index
 
 #Given sliding window and stopping values, we average the accuracy and prediction time for the model
+from sklearn.model_selection import KFold
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.metrics import cohen_kappa_score, confusion_matrix
+import numpy as np
+from mne.decoding import CSP
+
 def run_sliding_classification_dynamic(subjects, threshold, patience, confidence_type, w_length, w_step, sfreq, csp_components, solver, shrinkage, n_components, tol):
     scores_across_subjects = []
     kappa_across_subjects = []
@@ -88,120 +94,135 @@ def run_sliding_classification_dynamic(subjects, threshold, patience, confidence
     subjects_kappa = []
     subjects_prediction_times = []
     subjects_itrs = []
-    #confusion matrix
+    # confusion matrix
     number_cm = 0 
     cm = np.zeros((4,4))
     current_person = 0
+
     for person in subjects:
         current_person += 1
         print("Person %d" % (person))
-        subject= [person]
+        subject = [person]
         epochs, labels = make_data(subject)
-        #labels = epochs.events[:, -1] - 4
         epochs_data = epochs.get_data(copy=False)
 
-        #get the training set - first session of the data
+        # Get the training set - first session of the data
         train_indexes = [i for i, epoch in enumerate(epochs) if epochs[i].metadata['session'].iloc[0] == '0train']
         train_data = epochs_data[train_indexes]
         train_labels = labels[train_indexes]
 
-        #get the test set - second session of the data
-        test_indexes = [i for i, epoch in enumerate(epochs) if epochs[i].metadata['session'].iloc[0] == '1test']
-        test_data = epochs_data[test_indexes]
-        test_labels = labels[test_indexes]
+        cv = KFold(n_splits=10, shuffle=True, random_state=42)
+
+        scores_cv_splits = []
+        kappa_cv_splits = []
+        prediction_time_cv_splits = []
+        itr_cv_splits = []
 
         if solver == 'svd':
-            lda = LinearDiscriminantAnalysis(solver = solver, tol = tol, n_components = n_components)
+            lda = LinearDiscriminantAnalysis(solver=solver, tol=tol, n_components=n_components)
         else:
-            lda = LinearDiscriminantAnalysis(solver = solver, shrinkage = shrinkage, n_components = n_components)
+            lda = LinearDiscriminantAnalysis(solver=solver, shrinkage=shrinkage, n_components=n_components)
         csp = CSP(n_components=csp_components, reg=None, log=True, norm_trace=False)
-        current_cv = 0 
-        
-        #Training
-        current_cv += 1
-        X_train = csp.fit_transform(train_data, train_labels)
-        lda.fit(X_train, train_labels)
-        w_start = np.arange(0, epochs_data.shape[2] - w_length, w_step) 
-        #Testing/inference
-        scores_across_epochs = []
-        kappa_across_epochs = []
-        predict_time_across_epochs = []
-        itrs_across_epochs = []
-        predictions = []
-        for epoch_idx in range(len(test_indexes)):
-            previous_class_index = None
-            predict = False
-            numTimesThresholdCrossed = 0
-            for n in w_start:
-                X_test_window = csp.transform(test_data[:, :, n:(n + w_length)])
-                X_test_epoch_window = X_test_window[epoch_idx]
-                probabilities = lda.predict_proba([X_test_epoch_window])
-                probabilities = np.array(probabilities)
-                probabilities = probabilities.flatten()
-                predict, numTimesThresholdCrossed,  previous_class_index = early_pred(
-                    probabilities, predict, numTimesThresholdCrossed, patience, confidence_type, threshold,  previous_class_index
-                )
-                if predict:
-                    #score
-                    score = lda.score(X_test_epoch_window.reshape(1, -1), [test_labels[epoch_idx]])
+
+        for train_idx, test_idx in cv.split(train_data):
+            y_train, y_test = train_labels[train_idx], train_labels[test_idx]
+            X_train = csp.fit_transform(train_data[train_idx], y_train)
+            lda.fit(X_train, y_train)
+
+            w_start = np.arange(0, train_data.shape[2] - w_length, w_step)
+
+            scores_across_epochs = []
+            kappa_across_epochs = []
+            predict_time_across_epochs = []
+            predictions = []
+
+            for epoch_idx in range(len(test_idx)):
+                previous_class_index = None
+                predict = False
+                numTimesThresholdCrossed = 0
+
+                for n in w_start:
+                    X_test_window = csp.transform(train_data[test_idx][:, :, n:(n + w_length)])
+                    X_test_epoch_window = X_test_window[epoch_idx]
+                    probabilities = lda.predict_proba([X_test_epoch_window])
+                    probabilities = np.array(probabilities).flatten()
+
+                    predict, numTimesThresholdCrossed, previous_class_index = early_pred(
+                        probabilities, predict, numTimesThresholdCrossed, patience, confidence_type, threshold, previous_class_index
+                    )
+
+                    if predict:
+                        # score
+                        score = lda.score(X_test_epoch_window.reshape(1, -1), [y_test[epoch_idx]])
+                        scores_across_epochs.append(score)
+
+                        # prediction time
+                        predict_time = n + w_length
+                        predict_time_across_epochs.append(predict_time)
+
+                        # For kappa, and confusion matrix
+                        prediction = lda.predict(X_test_epoch_window.reshape(1, -1))
+                        predictions.append(prediction)
+                        break
+                else:
+                    # score
+                    score = lda.score(X_test_epoch_window.reshape(1, -1), [y_test[epoch_idx]])
                     scores_across_epochs.append(score)
 
-                    #prediction time
-                    predict_time = n + w_length
-                    predict_time_across_epochs.append(predict_time)
-                    #For kappa, and confusion matrix
+                    # prediction time
+                    predict_time_last = n + w_length
+                    predict_time_across_epochs.append(predict_time_last)
+
+                    # For kappa, and confusion matrix
                     prediction = lda.predict(X_test_epoch_window.reshape(1, -1))
                     predictions.append(prediction)
-                    break
-            else:
-                    #score
-                    score = lda.score(X_test_epoch_window.reshape(1, -1), [test_labels[epoch_idx]])
-                    scores_across_epochs.append(score)
 
-                    #prediction time
-                    #predict_time = n/250 +epochs.tmin()
-                    predict_time_last = n + w_length #end of the last window
-                    #print(f"couldnt predict early, pred time in seconds: {predict_time_last/sfreq + epochs.tmin} with w_length: {w_length/sfreq}")
-                    predict_time_across_epochs.append(predict_time_last)
-                    #For kappa, and confusion matrix
-                    prediction = lda.predict(X_test_epoch_window.reshape(1, -1))
-                    predictions.append(prediction)              
-        #Information transfer rate      
-        _, _, _, _, _, _, itr = calculate_best_itr_dyn(best_itr = 0, accuracy = np.mean(scores_across_epochs), prediction_time = np.mean(predict_time_across_epochs), best_subjects_accuracies_dyn= None, best_subjects_prediction_times_dyn= None, best_subjects_kappa_dyn= None, best_subjects_itrs_dyn= None, best_cm_dyn= None, subjects_accuracies_dyn= None, subjects_prediction_times_dyn= None, subjects_kappa_dyn= None, subjects_itrs_dyn = None, cm_dyn = None)
-        itrs_across_epochs = itr #single number
-        itrs_across_subjects.append(itr)
-        #Kappa
-        kappa_score = cohen_kappa_score(predictions, test_labels)
-        kappa_across_epochs =  kappa_score #single number
-        kappa_across_subjects.append(kappa_score)
-        #Confusion matrix
-        cm = np.array(cm) + np.array(confusion_matrix(test_labels, predictions, labels = ['left_hand', 'right_hand', 'tongue', 'feet']))
-        number_cm +=1
-        if current_person == 1:
-            scores_across_subjects  = scores_across_epochs
-            prediction_time_across_subjects = predict_time_across_epochs
-        else:
-            scores_across_subjects = np.vstack((scores_across_subjects, scores_across_epochs))
-            prediction_time_across_subjects = np.vstack((prediction_time_across_subjects, predict_time_across_epochs))
-        subjects_accuracies.append(np.mean(scores_across_epochs))
-        subjects_prediction_times.append(np.mean(predict_time_across_epochs))
-        subjects_kappa = np.append(subjects_kappa,kappa_across_epochs)    
-        subjects_itrs = np.append(subjects_itrs, itrs_across_epochs)
-    #accuracy
-    mean_scores_across_subjects = np.mean(scores_across_subjects, axis=1)
-    accuracy = np.mean(mean_scores_across_subjects) #single number
-    #kappa
-    mean_kappa_across_subjects = np.array(kappa_across_subjects)
-    kappa = np.mean(mean_kappa_across_subjects)# single number
-    #prediction time
-    mean_prediction_time_across_subjects = np.mean(prediction_time_across_subjects, axis=1)
-    prediction_time = np.mean(mean_prediction_time_across_subjects) #single number
-    #itr
-    mean_itr_across_subjects = np.array(itrs_across_subjects)
-    itr = np.mean(mean_itr_across_subjects) #single number
-    # calculate average confusion 
+            # Information transfer rate      
+            _, _, _, _, _, _, itr = calculate_best_itr_dyn(
+                best_itr=0, accuracy=np.mean(scores_across_epochs), prediction_time=np.mean(predict_time_across_epochs),
+                best_subjects_accuracies_dyn=None, best_subjects_prediction_times_dyn=None, best_subjects_kappa_dyn=None,
+                best_subjects_itrs_dyn=None, best_cm_dyn=None, subjects_accuracies_dyn=None, subjects_prediction_times_dyn=None,
+                subjects_kappa_dyn=None, subjects_itrs_dyn=None, cm_dyn=None
+            )
+            itr_cv_splits.append(itr)
+
+            # Kappa
+            kappa_score = cohen_kappa_score(predictions, y_test)
+            kappa_across_epochs.append(kappa_score)
+
+            # Append scores for this CV split
+            scores_cv_splits.append(np.mean(scores_across_epochs))
+            kappa_cv_splits.append(kappa_score)
+            prediction_time_cv_splits.append(np.mean(predict_time_across_epochs))
+
+        mean_scores_across_cv = np.mean(scores_cv_splits)
+        mean_kappa_across_cv = np.mean(kappa_cv_splits)
+        mean_prediction_time_across_cv = np.mean(prediction_time_cv_splits)
+        mean_itr_across_cv = np.mean(itr_cv_splits)
+
+        scores_across_subjects.append(mean_scores_across_cv)
+        kappa_across_subjects.append(mean_kappa_across_cv)
+        prediction_time_across_subjects.append(mean_prediction_time_across_cv)
+        itrs_across_subjects.append(mean_itr_across_cv)
+
+        subjects_accuracies.append(mean_scores_across_cv)
+        subjects_kappa.append(mean_kappa_across_cv)
+        subjects_prediction_times.append(mean_prediction_time_across_cv)
+        subjects_itrs.append(mean_itr_across_cv)
+
+        # Confusion matrix (average over CV splits)
+        cm += confusion_matrix(train_labels[test_idx], predictions, labels=['left_hand', 'right_hand', 'tongue', 'feet'])
+        number_cm += 1
+
+    # Final averages
+    accuracy = np.mean(scores_across_subjects)
+    kappa = np.mean(kappa_across_subjects)
+    prediction_time = np.mean(prediction_time_across_subjects)
+    itr = np.mean(itrs_across_subjects)
+
     cm = np.divide(cm, number_cm)
-    return accuracy, kappa, prediction_time, itr, cm, subjects_accuracies, subjects_prediction_times, subjects_kappa, subjects_itrs, mean_scores_across_subjects, mean_kappa_across_subjects, mean_prediction_time_across_subjects, mean_itr_across_subjects
+
+    return accuracy, kappa, prediction_time, itr, cm, subjects_accuracies, subjects_prediction_times, subjects_kappa, subjects_itrs
 
 #Sldiding window - classification - tuning using kfold cross validation
    ##calculate kappa and accuracy at each window step
@@ -424,6 +445,44 @@ def calculate_best_itr_dyn(best_itr, accuracy, prediction_time, best_subjects_ac
         best_itr = current_itr
         best_subjects_itrs_dyn = subjects_itrs_dyn
     return best_itr, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_subjects_itrs_dyn, best_cm_dyn, current_itr
+def run_random_search(subjects, confidence_types, patience_values, threshold_values, w_length, w_step, sfreq, csp_components, solver, shrinkage, n_components, tol):
+    best_itr_tune = 0
+    best_itr_threshold = 0
+    best_itr_patience = 0
+    best_confidence_type = None
+    
+    iterations = 60
+    rng_dyn = np.random.RandomState(42)
+    
+    # Perform 60 iterations
+    for iteration in range(iterations):
+        confidence_type =rng_dyn.choice(confidence_types)
+        patience = rng_dyn.choice(patience_values)
+        
+        # Initialize averages
+        avg_accuracy = 0
+        avg_prediction_time = 0
+        
+        # Loop over threshold values
+        for threshold in threshold_values:
+            accuracy, kappa, prediction_time, _, _, _, _, _ , _ = run_sliding_classification_dynamic(
+                subjects, threshold, patience, confidence_type, w_length, w_step, sfreq, csp_components, solver, shrinkage, n_components, tol
+            )
+            avg_accuracy += accuracy
+            avg_prediction_time += prediction_time
+        
+        # Calculate averages
+        avg_accuracy /= len(threshold_values)
+        avg_prediction_time /= len(threshold_values)
+        
+        # Calculate best itr using tuning function
+        best_itr_tune, best_itr_patience, best_itr_threshold, best_confidence_type = calculate_best_itr_dyn_tune(
+            best_itr_tune, best_itr_patience, best_itr_threshold, best_confidence_type, avg_accuracy, avg_prediction_time, patience, threshold, confidence_type
+        )
+        
+        print(f"Iteration {iteration+1}/{iterations} completed. Best ITR: {best_itr_tune} | Confidence Type: {best_confidence_type} | Patience: {best_itr_patience}")
+    
+    return best_itr_tune, best_itr_patience, best_confidence_type
 
 #Sliding - LDA
 def tune_lda_sliding():
@@ -460,22 +519,7 @@ def tune_lda_sliding():
     #Find optimal confidence type and patience from the sliding dynamic model using itr
     # over confidence values
 
-    #We tune with respect to ITR, as we not only want to focus on accuracy but also prediction time.
-    for j, confidence_type in enumerate(confidence_types):
-        best_itr_tune = 0
-        best_itr_threshold = 0
-        best_itr_patience = 0
-        best_confidence_type = None
-        # over threshold values
-        for n, threshold in enumerate(threshold_values):
-            # over patience values
-            for m, patience in enumerate(patience_values):
-                print("\n")
-                print(f" Confidence type: {j+1}/{len(confidence_types)}, Threshold:{n+1}/{len(threshold_values)},  Patience: {m+1}/{len(patience_values)}")
-                print("\n")
-                #given the varaibles, provide the average accuracy and prediction times (early prediction)
-                accuracy, kappa, prediction_time, _, _, _, _, _ , _, _, _, _, _ = run_sliding_classification_dynamic(subjects, threshold, patience, confidence_type, w_length, w_step, sfreq, csp_components, solver, shrinkage, n_components, tol)
-                best_itr_tune, best_itr_patience, best_itr_threshold, best_confidence_type = calculate_best_itr_dyn_tune(best_itr_tune, best_itr_patience, best_itr_threshold, best_confidence_type, accuracy, prediction_time, patience, threshold, confidence_type)
+    best_itr_tune, best_itr_patience, best_confidence_type = run_random_search(subjects, confidence_types, patience_values, threshold_values, w_length, w_step, sfreq, csp_components, solver, shrinkage, n_components, tol)
     #best_itr_patience = 3
     #best_confidence_type = 'neg_norm_shannon'
     print("\n\n Hyperparameter tuning (2): completed\n\n")
