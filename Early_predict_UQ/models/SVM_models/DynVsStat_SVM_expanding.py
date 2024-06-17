@@ -377,7 +377,7 @@ def plot_confusion_matrix(cm_stat, cm_dyn):
     plt.title(f"Confusion Matrix : SVM - Dynamic - Expanding model", fontsize=12)
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
-    s = sns.heatmap(cm_dyn, annot=True, fmt=".1f", cmap='magma', xticklabels=['left_hand', 'right_hand', 'tongue', 'feet'], yticklabels=['left_hand', 'right_hand', 'tongue', 'feet'])
+    s = sns.heatmap(cm_dyn, annot=True, fmt=".1f", cmap='magma', xticklabels=['Left hand', 'Right hand', 'Tongue', 'Feet'], yticklabels=['Left hand', 'Right hand', 'Tongue', 'Feet'])
     s.set(xlabel='Predicted Label', ylabel='True Label')
     plt.savefig(project_root + '/reports/figures/cumulative/SVM/dynamicVSstatic/Expanding_dynamic_ConfusionMatrix.png')
 
@@ -386,7 +386,7 @@ def plot_confusion_matrix(cm_stat, cm_dyn):
     plt.title(f"Confusion Matrix : SVM - Static - Expanding model", fontsize=12)
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
-    s = sns.heatmap(cm_stat, annot=True, fmt=".1f", cmap='magma', xticklabels=['left_hand', 'right_hand', 'tongue', 'feet'], yticklabels=['left_hand', 'right_hand', 'tongue', 'feet'])
+    s = sns.heatmap(cm_stat, annot=True, fmt=".1f", cmap='magma', xticklabels=['Left hand', 'Right hand', 'Tongue', 'Feet'], yticklabels=['Left hand', 'Right hand', 'Tongue', 'Feet'])
     s.set(xlabel='Predicted Label', ylabel='True Label')
     plt.savefig(project_root + '/reports/figures/cumulative/SVM/dynamicVSstatic/Expanding_static_ConfusionMatrix.png')
 #Expanding model - SVM
@@ -394,15 +394,18 @@ def main_svm_expanding():
     subjects = [1,2,3,4,5,6,7,8,9]  # 9 subjects
     sfreq = 250    # Sampling frequency - 250Hz
 
-    best_params_expanding, best_itr_patience, best_confidence_type = tune_svm_expanding()
+    #best_params_expanding, best_itr_patience, best_confidence_type = tune_svm_expanding()
+    
+    best_itr_patience = 3
+    best_confidence_type = 'neg_norm_shannon'
     
     csp_components = 8 #best_params_expanding['csp_components']
-    initial_window_length = 250 #best_params_expanding['initial_window_length']
-    expansion_rate = 75 #best_params_expanding['expansion_rate']
+    initial_window_length = 225 #best_params_expanding['initial_window_length']
+    expansion_rate = 50 #best_params_expanding['expansion_rate']
     c = 1000 #best_params_expanding['C']
     kernel = 'rbf' #best_params_expanding['kernel']
-    gamma = 0.1 #best_params_expanding['gamma']
-    degree = 2 #best_params_expanding['degree']
+    gamma = 0.0001 #best_params_expanding['gamma']
+    degree = None #best_params_expanding['degree']
 
     w_start= np.arange(0, epochs_info(length= True) - initial_window_length, expansion_rate) 
     confidence_types = ['highest_prob','difference_two_highest', 'neg_norm_shannon' ]

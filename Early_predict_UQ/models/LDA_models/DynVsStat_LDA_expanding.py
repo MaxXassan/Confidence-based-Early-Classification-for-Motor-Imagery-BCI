@@ -370,7 +370,7 @@ def plot_confusion_matrix(cm_stat, cm_dyn):
     plt.title("Confusion Matrix: LDA - Dynamic - Expanding model", fontsize=12)
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
-    s = sns.heatmap(cm_dyn, annot=True, fmt=".1f", cmap='magma', xticklabels=['left_hand', 'right_hand', 'tongue', 'feet'], yticklabels=['left_hand', 'right_hand', 'tongue', 'feet'])
+    s = sns.heatmap(cm_dyn, annot=True, fmt=".1f", cmap='magma', xticklabels=['Left hand', 'Right hand', 'Tongue', 'Feet'], yticklabels=['Left hand', 'Right hand', 'Tongue', 'Feet'])
     s.set(xlabel='Predicted Label', ylabel='True Label')
     plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamicVSstatic/Expanding_dynamic_ConfusionMatrix.png')
 
@@ -379,7 +379,7 @@ def plot_confusion_matrix(cm_stat, cm_dyn):
     plt.title("Confusion Matrix: LDA - Static - Expanding model", fontsize=12)
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
-    s = sns.heatmap(cm_stat, annot=True, fmt=".1f", cmap='magma', xticklabels=['left_hand', 'right_hand', 'tongue', 'feet'], yticklabels=['left_hand', 'right_hand', 'tongue', 'feet'])
+    s = sns.heatmap(cm_stat, annot=True, fmt=".1f", cmap='magma', xticklabels=['Left hand', 'Right hand', 'Tongue', 'Feet'], yticklabels=['Left hand', 'Right hand', 'Tongue', 'Feet'])
     s.set(xlabel='Predicted Label', ylabel='True Label')
     plt.savefig(project_root + '/reports/figures/cumulative/LDA/dynamicVSstatic/Expanding_static_ConfusionMatrix.png')
 #Expanding model - LDA

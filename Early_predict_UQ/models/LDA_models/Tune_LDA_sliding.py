@@ -335,7 +335,7 @@ def hyperparameter_tuning (parameters_list, subjects):
     best_accuracy = 0
     for n, param_set in enumerate(parameters_list):
         csp_components = param_set['csp_components']
-        w_length = param_set['csp_components'] 
+        w_length = param_set['w_length'] 
         w_step =  param_set['w_step']
         solver = param_set['solver']
         shrinkage = param_set['shrinkage']
