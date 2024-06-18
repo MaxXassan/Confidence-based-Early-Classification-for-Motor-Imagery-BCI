@@ -88,12 +88,10 @@ def run_sliding_classification_dynamic(subjects, threshold, patience, confidence
     scores_across_subjects = []
     kappa_across_subjects = []
     prediction_time_across_subjects = []
-    itrs_across_subjects = []
 
     subjects_accuracies = []
     subjects_kappa = []
     subjects_prediction_times = []
-    subjects_itrs = []
     # confusion matrix
     number_cm = 0 
     cm = np.zeros((4,4))
@@ -116,7 +114,6 @@ def run_sliding_classification_dynamic(subjects, threshold, patience, confidence
         scores_cv_splits = []
         kappa_cv_splits = []
         prediction_time_cv_splits = []
-        itr_cv_splits = []
 
         if solver == 'svd':
             lda = LinearDiscriminantAnalysis(solver=solver, tol=tol, n_components=n_components)
@@ -177,15 +174,6 @@ def run_sliding_classification_dynamic(subjects, threshold, patience, confidence
                     prediction = lda.predict(X_test_epoch_window.reshape(1, -1))
                     predictions.append(prediction)
 
-            # Information transfer rate      
-            _, _, _, _, _, _, itr = calculate_best_itr_dyn(
-                best_itr=0, accuracy=np.mean(scores_across_epochs), prediction_time=np.mean(predict_time_across_epochs),
-                best_subjects_accuracies_dyn=None, best_subjects_prediction_times_dyn=None, best_subjects_kappa_dyn=None,
-                best_subjects_itrs_dyn=None, best_cm_dyn=None, subjects_accuracies_dyn=None, subjects_prediction_times_dyn=None,
-                subjects_kappa_dyn=None, subjects_itrs_dyn=None, cm_dyn=None
-            )
-            itr_cv_splits.append(itr)
-
             # Kappa
             kappa_score = cohen_kappa_score(predictions, y_test)
             kappa_across_epochs.append(kappa_score)
@@ -198,17 +186,14 @@ def run_sliding_classification_dynamic(subjects, threshold, patience, confidence
         mean_scores_across_cv = np.mean(scores_cv_splits)
         mean_kappa_across_cv = np.mean(kappa_cv_splits)
         mean_prediction_time_across_cv = np.mean(prediction_time_cv_splits)
-        mean_itr_across_cv = np.mean(itr_cv_splits)
 
         scores_across_subjects.append(mean_scores_across_cv)
         kappa_across_subjects.append(mean_kappa_across_cv)
         prediction_time_across_subjects.append(mean_prediction_time_across_cv)
-        itrs_across_subjects.append(mean_itr_across_cv)
 
         subjects_accuracies.append(mean_scores_across_cv)
         subjects_kappa.append(mean_kappa_across_cv)
         subjects_prediction_times.append(mean_prediction_time_across_cv)
-        subjects_itrs.append(mean_itr_across_cv)
 
         # Confusion matrix (average over CV splits)
         cm += confusion_matrix(train_labels[test_idx], predictions, labels=['left_hand', 'right_hand', 'tongue', 'feet'])
@@ -218,11 +203,8 @@ def run_sliding_classification_dynamic(subjects, threshold, patience, confidence
     accuracy = np.mean(scores_across_subjects)
     kappa = np.mean(kappa_across_subjects)
     prediction_time = np.mean(prediction_time_across_subjects)
-    itr = np.mean(itrs_across_subjects)
-
     cm = np.divide(cm, number_cm)
-
-    return accuracy, kappa, prediction_time, itr, cm, subjects_accuracies, subjects_prediction_times, subjects_kappa, subjects_itrs
+    return accuracy, kappa, prediction_time, cm, subjects_accuracies, subjects_prediction_times, subjects_kappa
 
 #Sldiding window - classification - tuning using kfold cross validation
    ##calculate kappa and accuracy at each window step
@@ -427,24 +409,8 @@ def calculate_best_itr_dyn_tune(best_itr, best_itr_patience, best_itr_threshold,
         best_itr_threshold = threshold
         best_itr = current_itr
         best_confidence_type = confidence_type
-    return best_itr, best_itr_patience, best_itr_threshold, best_confidence_type
+    return best_itr, best_itr_patience, best_itr_threshold, best_confidence_type, current_itr
 
-def calculate_best_itr_dyn(best_itr, accuracy, prediction_time, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_subjects_itrs_dyn, best_cm_dyn, subjects_accuracies_dyn, subjects_prediction_times_dyn, subjects_kappa_dyn, subjects_itrs_dyn, cm_dyn):
-    number_classes = 4 # we have 4 classes in this dataset
-    current_B = log2(number_classes) + accuracy*log2(accuracy)+(1-accuracy)*log2((1-accuracy)/(number_classes-1))
-
-    prediction_time = prediction_time/250 #turning prediction time to seconds first
-    current_Q =  60/prediction_time 
-
-    current_itr = current_B * current_Q
-    if current_itr > best_itr:
-        best_subjects_accuracies_dyn = subjects_accuracies_dyn
-        best_subjects_kappa_dyn  = subjects_kappa_dyn 
-        best_subjects_prediction_times_dyn = subjects_prediction_times_dyn
-        best_cm_dyn = cm_dyn
-        best_itr = current_itr
-        best_subjects_itrs_dyn = subjects_itrs_dyn
-    return best_itr, best_subjects_accuracies_dyn, best_subjects_prediction_times_dyn, best_subjects_kappa_dyn, best_subjects_itrs_dyn, best_cm_dyn, current_itr
 def run_random_search(subjects, confidence_types, patience_values, threshold_values, w_length, w_step, sfreq, csp_components, solver, shrinkage, n_components, tol):
     best_itr_tune = 0
     best_itr_threshold = 0
@@ -465,7 +431,7 @@ def run_random_search(subjects, confidence_types, patience_values, threshold_val
         
         # Loop over threshold values
         for threshold in threshold_values:
-            accuracy, kappa, prediction_time, _, _, _, _, _ , _ = run_sliding_classification_dynamic(
+            accuracy, kappa, prediction_time, _, _, _, _ = run_sliding_classification_dynamic(
                 subjects, threshold, patience, confidence_type, w_length, w_step, sfreq, csp_components, solver, shrinkage, n_components, tol
             )
             avg_accuracy += accuracy
@@ -476,11 +442,11 @@ def run_random_search(subjects, confidence_types, patience_values, threshold_val
         avg_prediction_time /= len(threshold_values)
         
         # Calculate best itr using tuning function
-        best_itr_tune, best_itr_patience, best_itr_threshold, best_confidence_type = calculate_best_itr_dyn_tune(
+        best_itr_tune, best_itr_patience, best_itr_threshold, best_confidence_type, current_itr = calculate_best_itr_dyn_tune(
             best_itr_tune, best_itr_patience, best_itr_threshold, best_confidence_type, avg_accuracy, avg_prediction_time, patience, threshold, confidence_type
         )
         
-        print(f"Iteration {iteration+1}/{iterations} completed. Best ITR: {best_itr_tune} | Confidence Type: {best_confidence_type} | Patience: {best_itr_patience}")
+        print(f"Iteration {iteration+1}/{iterations} completed. Current ITR: {current_itr}, current confidence type: {confidence_type}, current patience:{patience} \n Best ITR: {best_itr_tune} | Best Confidence Type: {best_confidence_type} | Best Patience: {best_itr_patience}")
     
     return best_itr_tune, best_itr_patience, best_confidence_type
 
