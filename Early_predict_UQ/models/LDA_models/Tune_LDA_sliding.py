@@ -349,7 +349,7 @@ def hyperparameter_tuning (parameters_list, subjects):
         )
         mean_accuracy = np.mean(accuracy)
 
-        print(f"Iteration {n+1}/{len(parameters_list)}: Mean accuracy for parameters {param_set} is {mean_accuracy}")
+        print(f"Iteration {n+1}/{len(parameters_list)}: Mean accuracy for parameters {param_set} is {mean_accuracy}",flush=True)
         #Write to file
         h = open(project_root + "/reports/figures/cumulative/LDA/dynamicVSstatic/sliding_model_tuning1.txt", "w")
         h.write(f"Accuracy: {mean_accuracy}, Parameters: {param_set}")
@@ -446,7 +446,7 @@ def run_random_search(subjects, confidence_types, patience_values, threshold_val
             best_itr_tune, best_itr_patience, best_itr_threshold, best_confidence_type, avg_accuracy, avg_prediction_time, patience, threshold, confidence_type
         )
         
-        print(f"Iteration {iteration+1}/{iterations} completed. Current ITR: {current_itr}, current confidence type: {confidence_type}, current patience:{patience} \n Best ITR: {best_itr_tune} | Best Confidence Type: {best_confidence_type} | Best Patience: {best_itr_patience}")
+        print(f"Iteration {iteration+1}/{iterations} completed. Current ITR: {current_itr}, current confidence type: {confidence_type}, current patience:{patience} \n Best ITR: {best_itr_tune} | Best Confidence Type: {best_confidence_type} | Best Patience: {best_itr_patience}",flush=True)
     
     return best_itr_tune, best_itr_patience, best_confidence_type
 
@@ -458,11 +458,11 @@ def tune_lda_sliding():
     Hyperparameter tuning
     '''
     #Hyperparameter_tuning for csp, and expanding window parameters using the static model, as we have limited compute
-    print("\n\n Hyperparameter tuning (1): csp and window parameters \n\n")
+    print("\n\n Hyperparameter tuning (1): csp and window parameters \n\n",flush=True)
     
     parameters_list = create_parameterslist(sfreq)
     best_params_sliding, _ = hyperparameter_tuning(parameters_list, subjects) #tuned on accuracy as we dont have pred time for itr
-    print("\n\n Hyperparameter tuning (1): completed \n\n")
+    print("\n\n Hyperparameter tuning (1): completed \n\n",flush=True)
     csp_components =  best_params_sliding['csp_components']
     w_length =  best_params_sliding['w_length']
     w_step = best_params_sliding['w_step']
@@ -470,8 +470,8 @@ def tune_lda_sliding():
     shrinkage = best_params_sliding['shrinkage']
     n_components = best_params_sliding['n_components']
     tol = best_params_sliding['tol']
-    print(f"Chosen_hyperparameter_values: \n - csp: {csp_components},\n - window length: {w_length}, \n -w_step: {w_step}, \n - solver : {solver}, \n - shrinkage: {shrinkage},\n - n_components: {n_components}, \n - tol: {tol}")
-    print("\n\n Hyperparameter tuning (2): patience and confidence type \n\n")
+    print(f"Chosen_hyperparameter_values: \n - csp: {csp_components},\n - window length: {w_length}, \n -w_step: {w_step}, \n - solver : {solver}, \n - shrinkage: {shrinkage},\n - n_components: {n_components}, \n - tol: {tol}",flush=True)
+    print("\n\n Hyperparameter tuning (2): patience and confidence type \n\n",flush=True)
     w_start= np.arange(0, epochs_info(length= True) -  w_length,  w_step)  # epochs_info(length= True) = 1001
 
     confidence_types = ['highest_prob','difference_two_highest', 'neg_norm_shannon']
@@ -488,8 +488,8 @@ def tune_lda_sliding():
     best_itr_tune, best_itr_patience, best_confidence_type = run_random_search(subjects, confidence_types, patience_values, threshold_values, w_length, w_step, sfreq, csp_components, solver, shrinkage, n_components, tol)
     #best_itr_patience = 3
     #best_confidence_type = 'neg_norm_shannon'
-    print("\n\n Hyperparameter tuning (2): completed\n\n")
-    print(f"chosen patience: {best_itr_patience}, chosen confidence_type: {best_confidence_type}")
+    print("\n\n Hyperparameter tuning (2): completed\n\n",flush=True)
+    print(f"chosen patience: {best_itr_patience}, chosen confidence_type: {best_confidence_type}",flush=True)
 
 
     return best_params_sliding, best_itr_patience, best_confidence_type

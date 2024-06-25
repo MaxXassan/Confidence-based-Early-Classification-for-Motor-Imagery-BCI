@@ -3,4 +3,4 @@ Chosen parameters:
  - initial_window_length: 250
  - expansion-rate:  50 
  - confidence_type: neg_norm_shannon, 
- - patience: 3 out of [ 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15]
+ - patience: 5 out of [ 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15]

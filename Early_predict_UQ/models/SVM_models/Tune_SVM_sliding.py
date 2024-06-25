@@ -342,7 +342,7 @@ def hyperparameter_tuning (parameters_list, subjects):
         
         mean_accuracy = np.mean(accuracy)
 
-        print(f"Iteration {n+1}/{len(parameters_list)}: Mean accuracy for parameters {param_set} is {mean_accuracy}")
+        print(f"Iteration {n+1}/{len(parameters_list)}: Mean accuracy for parameters {param_set} is {mean_accuracy}",flush=True)
         #Write to file
         h = open(project_root + "/reports/figures/cumulative/SVM/dynamicVSstatic/sliding_model_tuning1.txt", "w")
         h.write(f"Accuracy: {mean_accuracy}, Parameters: {param_set}")
@@ -438,7 +438,7 @@ def run_random_search(subjects, confidence_types, patience_values, threshold_val
             best_itr_tune, best_itr_patience, best_itr_threshold, best_confidence_type, avg_accuracy, avg_prediction_time, patience, threshold, confidence_type
         )
         
-        print(f"Iteration {iteration+1}/{iterations} completed. Current ITR: {current_itr}, current confidence type: {confidence_type}, current patience:{patience} \n Best ITR: {best_itr_tune} | Best Confidence Type: {best_confidence_type} | Best Patience: {best_itr_patience}")
+        print(f"Iteration {iteration+1}/{iterations} completed. Current ITR: {current_itr}, current confidence type: {confidence_type}, current patience:{patience} \n Best ITR: {best_itr_tune} | Best Confidence Type: {best_confidence_type} | Best Patience: {best_itr_patience}",flush=True)
     
     return best_itr_tune, best_itr_patience, best_confidence_type
 
@@ -450,10 +450,10 @@ def tune_svm_sliding():
     Hyperparameter tuning
     '''
     #Hyperparameter_tuning for csp, and sliding window parameters using the static model
-    print("\n\n Hyperparameter tuning (1): csp and window parameters \n\n")
+    print("\n\n Hyperparameter tuning (1): csp and window parameters \n\n",flush=True)
     parameters_list = create_parameterslist(sfreq)
     best_params_sliding, _ = hyperparameter_tuning(parameters_list, subjects) #tuned on accuracy as we dont have pred time for itr
-    print("\n\n Hyperparameter tuning (1): completed \n\n")
+    print("\n\n Hyperparameter tuning (1): completed \n\n",flush=True)
     csp_components = best_params_sliding['csp_components']
     w_length = best_params_sliding['w_length']
     w_step = best_params_sliding['w_step']
@@ -461,7 +461,7 @@ def tune_svm_sliding():
     kernel = best_params_sliding['kernel']
     gamma = best_params_sliding['gamma']
     degree = best_params_sliding['degree']
-    print(f"Chosen_hyperparameter_values: \n - csp: {csp_components},\n - w_length: {w_length}, \n - w_step: { w_step}, \n c: {c}, \n kernel: {kernel}, \n gamma: {gamma}, \n degree: {degree}")
+    print(f"Chosen_hyperparameter_values: \n - csp: {csp_components},\n - w_length: {w_length}, \n - w_step: { w_step}, \n c: {c}, \n kernel: {kernel}, \n gamma: {gamma}, \n degree: {degree}",flush=True)
 
     w_start= np.arange(0, epochs_info(length= True) -  w_length,  w_step) 
     confidence_types = ['highest_prob','difference_two_highest', 'neg_norm_shannon' ]
@@ -472,10 +472,10 @@ def tune_svm_sliding():
     threshold_values = np.append(threshold_values, [0.99, 0.999])
     #threshold_values = [0.1, 0.5, 0.9]
     #Find optimal confidence type and patience from the sliding dynamic model using itr
-    print("\n\n Hyperparameter tuning (2): patience and confidence type \n\n")
+    print("\n\n Hyperparameter tuning (2): patience and confidence type \n\n",flush=True)
     best_itr_tune, best_itr_patience, best_confidence_type = run_random_search(subjects, confidence_types, patience_values, threshold_values, w_length, w_step, sfreq, csp_components, c, kernel, gamma, degree)
-    print("\n\n Hyperparameter tuning (2): completed\n\n")
-    print(f"chosen patience: {best_itr_patience}, chosen confidence_type: {best_confidence_type}")
+    print("\n\n Hyperparameter tuning (2): completed\n\n",flush=True)
+    print(f"chosen patience: {best_itr_patience}, chosen confidence_type: {best_confidence_type}", flush=True)
 
 
     return best_params_sliding, best_itr_patience, best_confidence_type

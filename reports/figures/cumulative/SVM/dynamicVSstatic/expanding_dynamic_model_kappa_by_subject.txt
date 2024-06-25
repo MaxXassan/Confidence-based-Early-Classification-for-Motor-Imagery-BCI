@@ -1,10 +1,10 @@
-Average kappa - Dynamic Model: 0.4048749604305159
-Subject 9: Kappa: 0.5787037037037037 
-Subject 3: Kappa: 0.47685185185185186 
-Subject 1: Kappa: 0.4444444444444444 
-Subject 8: Kappa: 0.4212962962962963 
-Subject 4: Kappa: 0.3287037037037037 
-Subject 7: Kappa: 0.32407407407407407 
-Subject 6: Kappa: 0.24537037037037035 
-Subject 2: Kappa: 0.18055555555555558 
-Subject 5: Kappa: 0.14814814814814814 
+Average kappa - Dynamic Model: 0.43368154479265597
+Subject 9: Kappa: 0.6680911680911681 
+Subject 3: Kappa: 0.5758547008547008 
+Subject 1: Kappa: 0.5733618233618233 
+Subject 8: Kappa: 0.525997150997151 
+Subject 4: Kappa: 0.4173789173789174 
+Subject 2: Kappa: 0.34900284900284906 
+Subject 7: Kappa: 0.342948717948718 
+Subject 6: Kappa: 0.29095441595441596 
+Subject 5: Kappa: 0.15954415954415962 

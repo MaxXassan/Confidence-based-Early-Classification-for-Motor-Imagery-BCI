@@ -1,10 +1,10 @@
-Average kappa - Static Model: 0.41021684077239634
-Subject 9: Kappa: 0.6417378917378916 
-Subject 1: Kappa: 0.580840455840456 
-Subject 3: Kappa: 0.5509259259259258 
-Subject 8: Kappa: 0.5252849002849003 
-Subject 7: Kappa: 0.396011396011396 
-Subject 4: Kappa: 0.38497150997151 
-Subject 6: Kappa: 0.2507122507122507 
-Subject 2: Kappa: 0.2403846153846154 
-Subject 5: Kappa: 0.12108262108262108 
+Average kappa - Static Model: 0.44005223171889846
+Subject 9: Kappa: 0.6599002849002851 
+Subject 1: Kappa: 0.5986467236467236 
+Subject 3: Kappa: 0.5854700854700854 
+Subject 8: Kappa: 0.5804843304843303 
+Subject 4: Kappa: 0.44337606837606836 
+Subject 7: Kappa: 0.4138176638176638 
+Subject 2: Kappa: 0.3027065527065527 
+Subject 6: Kappa: 0.26566951566951563 
+Subject 5: Kappa: 0.11039886039886039 

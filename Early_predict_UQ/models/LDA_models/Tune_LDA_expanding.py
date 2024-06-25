@@ -335,7 +335,7 @@ def hyperparameter_tuning(parameters_list, subjects):
         )
 
         mean_accuracy = np.mean(accuracy)
-        print(f"Iteration {n+1}/{len(parameters_list)}: Mean accuracy for parameters {param_set} is {mean_accuracy}")
+        print(f"Iteration {n+1}/{len(parameters_list)}: Mean accuracy for parameters {param_set} is {mean_accuracy}",flush=True)
         #Write to file
         h = open(project_root + "/reports/figures/cumulative/LDA/dynamicVSstatic/expanding_model_tuning1.txt", "w")
         h.write(f"Accuracy: {mean_accuracy}, Parameters: {param_set}")
@@ -431,7 +431,7 @@ def run_random_search(subjects, confidence_types, patience_values, threshold_val
             best_itr_tune, best_itr_patience, best_itr_threshold, best_confidence_type, avg_accuracy, avg_prediction_time, patience, threshold, confidence_type
         )
         
-        print(f"Iteration {iteration+1}/{iterations} completed. Current ITR: {current_itr}, current confidence type: {confidence_type}, current patience:{patience} \n Best ITR: {best_itr_tune} | Best Confidence Type: {best_confidence_type} | Best Patience: {best_itr_patience}")
+        print(f"Iteration {iteration+1}/{iterations} completed. Current ITR: {current_itr}, current confidence type: {confidence_type}, current patience:{patience} \n Best ITR: {best_itr_tune} | Best Confidence Type: {best_confidence_type} | Best Patience: {best_itr_patience}",flush=True)
     
     return best_itr_tune, best_itr_patience, best_confidence_type
 
@@ -443,10 +443,10 @@ def tune_lda_expanding():
     Hyperparameter tuning
     '''
     #Hyperparameter_tuning for csp, and expanding window parameters using the static model, as we have limited compute
-    print("\n\n Hyperparameter tuning (1): csp and window parameters \n\n")
+    print("\n\n Hyperparameter tuning (1): csp and window parameters \n\n",flush=True)
     parameters_list = create_parameterslist(sfreq)
     best_params_expanding, _ = hyperparameter_tuning(parameters_list, subjects) #tuned on accuracy as we dont have pred time for itr
-    print("\n\n Hyperparameter tuning (1): completed \n\n")
+    print("\n\n Hyperparameter tuning (1): completed \n\n",flush=True)
     
     csp_components = best_params_expanding['csp_components']
     initial_window_length = best_params_expanding['initial_window_length']
@@ -456,7 +456,7 @@ def tune_lda_expanding():
     tol = best_params_expanding['tol']
     shrinkage = best_params_expanding['shrinkage']
 
-    print(f"Chosen_hyperparameter_values: \n - csp: {csp_components},\n - initial_window_length : { initial_window_length }, \n -expansion_rate: {expansion_rate}, \n - solver : {solver}, \n - shrinkage: {shrinkage},\n - n_components: {n_components}, \n - tol: {tol}")
+    print(f"Chosen_hyperparameter_values: \n - csp: {csp_components},\n - initial_window_length : { initial_window_length }, \n -expansion_rate: {expansion_rate}, \n - solver : {solver}, \n - shrinkage: {shrinkage},\n - n_components: {n_components}, \n - tol: {tol}",flush=True)
       
     
 
@@ -469,14 +469,14 @@ def tune_lda_expanding():
     threshold_values =np.concatenate(([0.001, 0.01], threshold_values))
     threshold_values = np.append(threshold_values, [0.99, 0.999])
     #Find optimal confidence type and patience from the expanding dynamic model using itr
-    print("\n\n Hyperparameter tuning (2): patience and confidence type \n\n")
+    print("\n\n Hyperparameter tuning (2): patience and confidence type \n\n",flush=True)
 
     #We tune with respect to ITR, as we not only want to focus on accuracy but also prediction time.
     best_itr_tune, best_itr_patience, best_confidence_type = run_random_search(subjects, confidence_types, patience_values, threshold_values,  initial_window_length, expansion_rate, sfreq, csp_components, solver, shrinkage, n_components, tol)
     #best_itr_patience = 3
     #best_confidence_type = 'neg_norm_shannon'
-    print("\n\n Hyperparameter tuning (2): completed\n\n")
-    print(f"chosen patience: {best_itr_patience}, chosen confidence_type: {best_confidence_type}")
+    print("\n\n Hyperparameter tuning (2): completed\n\n",flush=True)
+    print(f"chosen patience: {best_itr_patience}, chosen confidence_type: {best_confidence_type}",flush=True)
 
     return best_params_expanding, best_itr_patience, best_confidence_type
 

@@ -2,8 +2,8 @@ Chosen parameters:
  - csp: 8, 
  - kernel: rbf, 
  - C: 1000, 
- - gamma: 0.01, 
- - initial_window_length: 250
- - expansion-rate:  75 
+ - gamma: 0.0001, 
+ - initial_window_length: 225
+ - expansion-rate:  50 
  - confidence_type: neg_norm_shannon, 
- - patience: 3 out of [ 1  2  3  4  5  6  7  8  9 10]
+ - patience: 5 out of [ 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15]

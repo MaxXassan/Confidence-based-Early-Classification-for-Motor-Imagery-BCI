@@ -1,0 +1,10 @@
+Average prediction time - Dynamic Model: 4.385208333333333
+Subject 5: Prediction time: 5.102516025641027 
+Subject 6: Prediction time: 4.776741452991454 
+Subject 9: Prediction time: 4.522521367521368 
+Subject 2: Prediction time: 4.477409188034188 
+Subject 4: Prediction time: 4.470892094017094 
+Subject 7: Prediction time: 4.090069444444444 
+Subject 1: Prediction time: 4.073883547008547 
+Subject 8: Prediction time: 3.9904700854700845 
+Subject 3: Prediction time: 3.9623717948717947 

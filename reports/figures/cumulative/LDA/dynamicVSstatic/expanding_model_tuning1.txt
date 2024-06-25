@@ -1,0 +1,1 @@
+Accuracy: 0.5845494663382593, Parameters: {'tol': None, 'solver': 'lsqr', 'shrinkage': 0.14, 'n_components': 3, 'initial_window_length': 250, 'expansion_rate': 50, 'csp_components': 8}
