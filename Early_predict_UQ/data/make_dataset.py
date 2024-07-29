@@ -1,7 +1,6 @@
 from moabb.datasets import BNCI2014_001
 from moabb.paradigms import MotorImagery
 
-
 '''
 2 sessions, 
     - 6 runs in each session, 
@@ -12,8 +11,6 @@ from moabb.paradigms import MotorImagery
     - trials containing artifacts as scored by experts are marked as events
       with the type 1023
 '''
-
-## (Need to adjust for multiple people)
 
 # Given a subject list, return the preprocessed and epoched data
 def make_data(subject_list):

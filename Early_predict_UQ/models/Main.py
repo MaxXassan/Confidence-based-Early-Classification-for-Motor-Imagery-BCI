@@ -1,18 +1,24 @@
 import os
 import sys
 
-current_directory = os.path.abspath('')
+current_directory = os.path.abspath("")
 
 project_root = current_directory
 
 sys.path.append(project_root)
 print("ROOT:", project_root)
 
+# Recommendation: Run each model invidiually (files that start with DynVsStat). This has very long run time, especially if you include tuning.
 
-from Early_predict_UQ.models.LDA_models.DynVsStat_LDA_expanding import main_lda_expanding
+from Early_predict_UQ.models.LDA_models.DynVsStat_LDA_expanding import (
+    main_lda_expanding,
+)
 from Early_predict_UQ.models.LDA_models.DynVsStat_LDA_sliding import main_lda_sliding
-from Early_predict_UQ.models.SVM_models.DynVsStat_SVM_expanding import main_svm_expanding
+from Early_predict_UQ.models.SVM_models.DynVsStat_SVM_expanding import (
+    main_svm_expanding,
+)
 from Early_predict_UQ.models.SVM_models.DynVsStat_SVM_sliding import main_svm_sliding
+
 
 def main_dyn_vs_stat():
     results = []
@@ -39,11 +45,11 @@ def main_dyn_vs_stat():
     results.append(("SVM - Sliding Dynamic", itr_dyn_svm_sliding))
     results.append(("SVM - Sliding Static", itr_stat_svm_sliding))
 
-    # Sort the results based on the values (you can choose to sort by dynamic or static values)
+    # Sort the results based on ITR
     sorted_results = sorted(results, key=lambda x: x[1], reverse=True)
 
     # Print the sorted order
-    print("----- Model Order Based on Values -----")
+    print("----- Model and ITR score -----")
     for model, value in sorted_results:
         print(f"{model}: {value}")
 
